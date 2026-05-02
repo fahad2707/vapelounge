@@ -204,8 +204,10 @@ function ProductCard({
 }
 
 type ProductsResponse = {
+  source?: 'mongodb' | 'no_database' | 'empty' | 'error'
   products: CatalogProduct[]
   brands?: string[]
+  total?: number
   message?: string
 }
 
@@ -217,24 +219,65 @@ export default function Shop() {
   const [loaded, setLoaded] = useState(false)
   const [modalProduct, setModalProduct] = useState<CatalogProduct | null>(null)
   const [brandSheet, setBrandSheet] = useState(false)
+  const [emptyHint, setEmptyHint] = useState<string | null>(null)
   const { dispatch } = useCart()
 
   useEffect(() => {
     const ac = new AbortController()
     setLoaded(false)
+    setEmptyHint(null)
     ;(async () => {
       try {
         const q = new URLSearchParams()
         q.set('limit', '1000')
         if (brandFilt && brandFilt !== 'All brands') q.set('brand', brandFilt)
         const r = await fetch(`/api/products?${q.toString()}`, { cache: 'no-store', signal: ac.signal })
-        const data = (await r.json()) as ProductsResponse
+        let data: ProductsResponse = { products: [] }
+        try {
+          data = (await r.json()) as ProductsResponse
+        } catch {
+          /* ignore */
+        }
         if (ac.signal.aborted) return
+
+        if (!r.ok) {
+          setProducts([])
+          setBrands(['All brands'])
+          setEmptyHint(
+            data.message ||
+              'Could not load the catalog. Open Vercel → your project → Logs, or check MongoDB Atlas.',
+          )
+          return
+        }
+
         if (Array.isArray(data.products)) setProducts(data.products)
         if (data.brands?.length) setBrands(data.brands)
+
+        if (Array.isArray(data.products) && data.products.length === 0) {
+          if (data.source === 'no_database') {
+            setEmptyHint(
+              data.message ||
+                'Add MONGODB_URI in Vercel (Production) and redeploy. Optional: MONGODB_DB_NAME must match what you used when seeding.',
+            )
+          } else if (data.source === 'empty') {
+            setEmptyHint(
+              data.message ||
+                'Database is connected but empty. Run npm run db:seed locally using the same URI as production.',
+            )
+          } else if (data.source === 'error') {
+            setEmptyHint(data.message || 'Database error.')
+          } else {
+            setEmptyHint(data.message || 'No products match this filter.')
+          }
+        } else {
+          setEmptyHint(null)
+        }
       } catch (e) {
         if (e instanceof Error && e.name === 'AbortError') return
-        if (!ac.signal.aborted) setProducts([])
+        if (!ac.signal.aborted) {
+          setProducts([])
+          setEmptyHint('Network error while loading products. Try refreshing the page.')
+        }
       } finally {
         if (!ac.signal.aborted) setLoaded(true)
       }
@@ -295,10 +338,17 @@ export default function Shop() {
         </aside>
 
         <div style={{ flex: 1, minWidth: 0 }}>
-          {loaded && products.length === 0 && (
-            <p style={{ color: 'var(--fog)', fontSize: 14, marginBottom: 24 }}>
-              No products loaded. Set <code style={{ color: 'var(--cream2)' }}>MONGODB_URI</code> and run{' '}
-              <code style={{ color: 'var(--cream2)' }}>npm run db:seed</code>.
+          {loaded && products.length === 0 && emptyHint && (
+            <p
+              style={{
+                color: 'var(--fog)',
+                fontSize: 14,
+                marginBottom: 24,
+                maxWidth: 640,
+                lineHeight: 1.75,
+              }}
+            >
+              {emptyHint}
             </p>
           )}
 
