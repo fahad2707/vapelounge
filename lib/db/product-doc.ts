@@ -1,6 +1,7 @@
+import type { ObjectId } from 'mongodb'
 import type { CatalogProduct, CatalogVariant } from '@/lib/catalog/types'
 
-/** MongoDB product document (Wix catalog seed). */
+/** MongoDB product document. */
 export interface ProductDoc {
   handleId: string
   name: string
@@ -20,6 +21,15 @@ export interface ProductDoc {
   collectionRaw: string
   visible: boolean
   accentColor: string
+
+  /** Admin-managed fields (added with the admin panel). */
+  costPrice?: number | null
+  quantity?: number | null
+  categoryId?: string | null
+  modelId?: string | null
+  variantGroupId?: string | null
+
+  createdAt?: Date
   updatedAt?: Date
 }
 
@@ -42,4 +52,36 @@ export function docToCatalogProduct(doc: ProductDoc): CatalogProduct {
     brand: doc.brand,
     accentColor: doc.accentColor,
   }
+}
+
+/** Category doc — top-level brand line (STLTH, Elfbar, Oxybar). */
+export interface CategoryDoc {
+  _id?: ObjectId
+  slug: string
+  name: string
+  /** Optional hero image for the homepage rotating carousel. */
+  image?: string | null
+  /** When true, shown on the public homepage rotating wheel (cap at 6). */
+  featured?: boolean
+  createdAt?: Date
+  updatedAt?: Date
+}
+
+/** Model doc — sub-line under a category (e.g. Elfbar BC5000, STLTH Pro). */
+export interface ModelDoc {
+  _id?: ObjectId
+  slug: string
+  name: string
+  categoryId: string
+  createdAt?: Date
+  updatedAt?: Date
+}
+
+/** Variant group — clubs sibling products (flavours of the same model) together. */
+export interface VariantGroupDoc {
+  _id?: ObjectId
+  name: string
+  productHandleIds: string[]
+  createdAt?: Date
+  updatedAt?: Date
 }

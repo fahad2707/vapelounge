@@ -25,7 +25,7 @@ export default function Nav() {
 
   return (
     <>
-      <nav style={{
+      <nav className="site-nav" style={{
         position:'fixed',top:0,left:0,right:0,zIndex:700,
         display:'flex',alignItems:'center',justifyContent:'space-between',
         padding: stuck ? '14px 56px' : '26px 56px',
@@ -33,8 +33,9 @@ export default function Nav() {
         backdropFilter: stuck ? 'blur(24px) saturate(1.4)' : 'none',
         borderBottom: stuck ? '1px solid var(--line)' : 'none',
         transition:'padding .45s var(--ease),background .45s,border-color .45s',
+        gap:12,
       }}>
-        <a href="#" style={{fontFamily:'var(--serif)',fontSize:18,fontWeight:500,letterSpacing:'.04em',display:'flex',alignItems:'center',gap:8}}>
+        <a href="#" className="nav-brand" style={{fontFamily:'var(--serif)',fontSize:18,fontWeight:500,letterSpacing:'.04em',display:'flex',alignItems:'center',gap:8,flexShrink:0,minWidth:0}}>
           <span style={{fontSize:20}}>💨</span>
           Vape<span style={{color:'var(--gold)'}}>Lounge</span>
         </a>
@@ -51,8 +52,8 @@ export default function Nav() {
           ))}
         </div>
 
-        <div style={{display:'flex',alignItems:'center',gap:12}}>
-          <button onClick={()=>dispatch({type:'OPEN'})} style={{
+        <div style={{display:'flex',alignItems:'center',gap:12,flexShrink:0}}>
+          <button className="nav-cart-btn" onClick={()=>dispatch({type:'OPEN'})} style={{
             display:'flex',alignItems:'center',gap:7,border:'1px solid var(--line)',
             padding:'8px 18px',fontSize:11,letterSpacing:'.12em',textTransform:'uppercase',
             color:'rgba(246,242,234,.7)',transition:'border-color .3s,color .3s',position:'relative',
@@ -82,8 +83,15 @@ export default function Nav() {
       </div>
 
       <style>{`
-        @media(max-width:768px){ .nav-mid-desktop{display:none!important} #ham-btn{display:flex!important} }
-        @media(min-width:769px){ #ham-btn{display:none!important} }
+        @media(max-width:768px){
+          .site-nav{ padding:14px 18px!important; gap:10px!important; }
+          .nav-mid-desktop{ display:none!important; }
+          #ham-btn{ display:flex!important; }
+          .nav-cart-btn{ display:none!important; }
+          .nav-brand{ font-size:16px!important; }
+          .nav-brand>span:first-child{ font-size:18px!important; }
+        }
+        @media(min-width:769px){ #ham-btn{ display:none!important; } }
       `}</style>
     </>
   )

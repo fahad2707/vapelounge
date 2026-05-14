@@ -189,10 +189,14 @@ body::before {
 @media (max-width:768px) {
   .pgrid { grid-template-columns:repeat(2,1fr) !important; }
   .story-scroll { height:180vh !important; }
-  .hl-scene { height:380px !important; }
+  .hl-scene { height:340px !important; }
+  .hl-card { width:150px !important; height:218px !important; top:-109px !important; left:-75px !important; }
+  .hl-card-face > div:first-child { height:94px !important; font-size:36px !important; }
   .about-float { left:0; bottom:16px; }
 }
 @media (max-width:480px) {
   .pgrid { grid-template-columns:repeat(2,1fr) !important; }
-  .hl-scene { height:340px !important; }
+  .hl-scene { height:300px !important; }
+  .hl-card { width:130px !important; height:190px !important; top:-95px !important; left:-65px !important; }
+  .hl-card-face > div:first-child { height:80px !important; font-size:32px !important; }
 }

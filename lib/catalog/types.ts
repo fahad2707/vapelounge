@@ -29,3 +29,11 @@ export interface CatalogProduct {
   brand: string | null
   accentColor: string
 }
+
+/** Sibling product in the same variant group (e.g. other flavours of Elfbar 5k). */
+export interface CatalogSibling {
+  id: string
+  name: string
+  image: string
+  flavourLabel: string
+}

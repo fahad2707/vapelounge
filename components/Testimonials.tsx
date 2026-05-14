@@ -17,7 +17,7 @@ export default function Testimonials() {
         </p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 1, background: 'var(--line2)' }}>
+      <div className="testi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 1, background: 'var(--line2)' }}>
         {TESTIMONIALS.map((t, i) => (
           <div key={t.name} className="tc rv" style={{ transitionDelay: `${.06 + i * .08}s` }}>
             <div style={{ fontFamily: 'var(--serif)', fontSize: 44, color: 'var(--gold)', opacity: .3, lineHeight: 1, marginBottom: 16 }}>&ldquo;</div>
@@ -39,8 +39,28 @@ export default function Testimonials() {
 
       <style>{`
         @media(max-width:768px){
-          #testi { padding:70px 20px 60px!important }
-          #testi > div:last-child { grid-template-columns:1fr!important }
+          #testi { padding:70px 0 60px!important }
+          #testi > .rv:first-child { padding:0 20px!important }
+          #testi .testi-grid {
+            display:flex!important;
+            grid-template-columns:none!important;
+            overflow-x:auto;
+            scroll-snap-type:x mandatory;
+            -webkit-overflow-scrolling:touch;
+            gap:12px!important;
+            background:transparent!important;
+            padding:0 20px 8px!important;
+            scrollbar-width:none;
+          }
+          #testi .testi-grid::-webkit-scrollbar { display:none; }
+          #testi .testi-grid > .tc {
+            flex:0 0 80%;
+            min-width:260px;
+            max-width:320px;
+            scroll-snap-align:start;
+            border:1px solid var(--line2);
+            padding:28px 22px!important;
+          }
         }
       `}</style>
     </section>

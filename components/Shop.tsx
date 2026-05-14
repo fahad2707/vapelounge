@@ -14,6 +14,15 @@ function badgeClass(badge: string | null): string {
   return 'tag'
 }
 
+function shuffle<T>(arr: T[]): T[] {
+  const out = arr.slice()
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[out[i], out[j]] = [out[j], out[i]]
+  }
+  return out
+}
+
 function ProductCard({
   p,
   onOpen,
@@ -215,12 +224,24 @@ export default function Shop() {
   const [products, setProducts] = useState<CatalogProduct[]>([])
   const [brands, setBrands] = useState<string[]>(['All brands'])
   const [brandFilt, setBrandFilt] = useState('All brands')
-  const [vis, setVis] = useState(24)
+  const [vis, setVis] = useState(36)
   const [loaded, setLoaded] = useState(false)
   const [modalProduct, setModalProduct] = useState<CatalogProduct | null>(null)
   const [brandSheet, setBrandSheet] = useState(false)
   const [emptyHint, setEmptyHint] = useState<string | null>(null)
   const { dispatch } = useCart()
+
+  useEffect(() => {
+    const onFilter = (e: Event) => {
+      const detail = (e as CustomEvent<string>).detail
+      if (typeof detail === 'string' && detail.trim()) {
+        setBrandFilt(detail.trim())
+        setVis(36)
+      }
+    }
+    window.addEventListener('vp:filter-brand', onFilter as EventListener)
+    return () => window.removeEventListener('vp:filter-brand', onFilter as EventListener)
+  }, [])
 
   useEffect(() => {
     const ac = new AbortController()
@@ -250,7 +271,7 @@ export default function Shop() {
           return
         }
 
-        if (Array.isArray(data.products)) setProducts(data.products)
+        if (Array.isArray(data.products)) setProducts(shuffle(data.products))
         if (data.brands?.length) setBrands(data.brands)
 
         if (Array.isArray(data.products) && data.products.length === 0) {
@@ -290,7 +311,7 @@ export default function Shop() {
 
   const selectBrand = (b: string) => {
     setBrandFilt(b)
-    setVis(24)
+    setVis(36)
     setBrandSheet(false)
   }
 
@@ -360,7 +381,7 @@ export default function Shop() {
 
           {products.length > vis && (
             <div style={{ textAlign: 'center', paddingTop: 40 }}>
-              <button type="button" className="btn-ghost" onClick={() => setVis(v => v + 24)}>
+              <button type="button" className="btn-ghost" onClick={() => setVis(v => v + 36)}>
                 Load more →
               </button>
             </div>
@@ -397,7 +418,24 @@ export default function Shop() {
         </div>
       )}
 
-      {modalProduct && <ProductModal product={modalProduct} onClose={() => setModalProduct(null)} />}
+      {modalProduct && (
+        <ProductModal
+          product={modalProduct}
+          onClose={() => setModalProduct(null)}
+          onSwitchToProduct={async handleId => {
+            const local = products.find(p => p.id === handleId)
+            if (local) { setModalProduct(local); return }
+            try {
+              const r = await fetch(`/api/products/${encodeURIComponent(handleId)}`, { cache: 'no-store' })
+              if (!r.ok) return
+              const j = (await r.json()) as { product?: CatalogProduct }
+              if (j.product) setModalProduct(j.product)
+            } catch {
+              /* ignore */
+            }
+          }}
+        />
+      )}
 
       <style>{`
         .shop-layout { display:flex; gap:40px; align-items:flex-start; max-width:1420px; margin:0 auto; }

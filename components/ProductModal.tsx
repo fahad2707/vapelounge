@@ -1,10 +1,27 @@
 'use client'
 import Image from 'next/image'
 import { useCallback, useEffect, useState } from 'react'
-import type { CatalogProduct, CatalogVariantChoice } from '@/lib/catalog/types'
+import type { CatalogProduct, CatalogSibling, CatalogVariantChoice } from '@/lib/catalog/types'
 import { formatCad } from '@/lib/currency'
 import { useCart } from '@/lib/store'
 import { useToast } from './Toast'
+
+/** Best-effort tail extraction: longest common prefix between `myName` and any
+ *  sibling name is treated as the family name; the remainder of `myName` is
+ *  the flavour. Falls back to the full name. */
+function inferShortFlavour(myName: string, siblings: CatalogSibling[]): string {
+  if (!siblings.length) return myName
+  const myWords = myName.trim().split(/\s+/)
+  let bestPrefix = 0
+  for (const s of siblings) {
+    const w = s.name.trim().split(/\s+/)
+    let i = 0
+    while (i < myWords.length && i < w.length && myWords[i].toLowerCase() === w[i].toLowerCase()) i++
+    if (i > bestPrefix) bestPrefix = i
+  }
+  const tail = myWords.slice(bestPrefix).join(' ').trim()
+  return tail || myName
+}
 
 function imageIndexForVariantPick(
   imagesLen: number,
@@ -78,7 +95,15 @@ function VariantBlock({
   )
 }
 
-export default function ProductModal({ product, onClose }: { product: CatalogProduct; onClose: () => void }) {
+export default function ProductModal({
+  product,
+  onClose,
+  onSwitchToProduct,
+}: {
+  product: CatalogProduct
+  onClose: () => void
+  onSwitchToProduct?: (handleId: string) => void
+}) {
   const { dispatch } = useCart()
   const toast = useToast()
 
@@ -86,6 +111,7 @@ export default function ProductModal({ product, onClose }: { product: CatalogPro
 
   const [imgIdx, setImgIdx] = useState(0)
   const [picked, setPicked] = useState<Record<string, number>>({})
+  const [siblings, setSiblings] = useState<CatalogSibling[]>([])
 
   useEffect(() => {
     setImgIdx(0)
@@ -93,6 +119,22 @@ export default function ProductModal({ product, onClose }: { product: CatalogPro
     for (const v of product.variants) init[v.name] = 0
     setPicked(init)
   }, [product.id, product.variants])
+
+  useEffect(() => {
+    let cancelled = false
+    setSiblings([])
+    ;(async () => {
+      try {
+        const r = await fetch(`/api/products/${encodeURIComponent(product.id)}`, { cache: 'no-store' })
+        if (!r.ok) return
+        const j = (await r.json()) as { siblings?: CatalogSibling[] }
+        if (!cancelled && Array.isArray(j.siblings)) setSiblings(j.siblings)
+      } catch {
+        /* ignore */
+      }
+    })()
+    return () => { cancelled = true }
+  }, [product.id])
 
   const clampIdx = useCallback(
     (i: number) => {
@@ -342,6 +384,50 @@ export default function ProductModal({ product, onClose }: { product: CatalogPro
             }}
             dangerouslySetInnerHTML={{ __html: product.descriptionHtml || `<p>${product.descriptionPlain}</p>` }}
           />
+
+          {siblings.length > 0 && (
+            <div style={{ borderTop: '1px solid var(--line2)', paddingTop: 20, marginBottom: 20 }}>
+              <div style={{ fontSize: 9, letterSpacing: '.18em', textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 12 }}>
+                Flavours
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                <button
+                  type="button"
+                  aria-pressed="true"
+                  style={{
+                    padding: '6px 12px',
+                    border: '1px solid var(--gold)',
+                    borderRadius: 3,
+                    fontSize: 11,
+                    color: 'var(--gold)',
+                    background: 'var(--gold-a10)',
+                    fontFamily: 'var(--body)',
+                  }}
+                >
+                  {inferShortFlavour(product.name, siblings)}
+                </button>
+                {siblings.map(s => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => onSwitchToProduct?.(s.id)}
+                    style={{
+                      padding: '6px 12px',
+                      border: '1px solid var(--line2)',
+                      borderRadius: 3,
+                      fontSize: 11,
+                      color: 'var(--cream2)',
+                      background: 'transparent',
+                      fontFamily: 'var(--body)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {s.flavourLabel}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {product.variants.length > 0 && (
             <div style={{ borderTop: '1px solid var(--line2)', paddingTop: 20, marginBottom: 20 }}>

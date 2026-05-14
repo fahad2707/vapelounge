@@ -130,3 +130,6 @@ Edit `lib/data.ts` → `PRODUCTS` array. Each product has:
 
 ### Change currency
 Search and replace `£` with `$` (or any currency) in `Shop.tsx` and `CartDrawer.tsx`.
+
+
+cd /Users/tahminachoudhury/Desktop/vapelounge

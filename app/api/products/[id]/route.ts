@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getProductByHandleId } from '@/lib/server/products'
+import { getProductByHandleId, getSiblingsForHandleId } from '@/lib/server/products'
 
 const CACHE_HEADER = {
   'Cache-Control': 'public, s-maxage=120, stale-while-revalidate=600',
@@ -16,9 +16,8 @@ export async function GET(
   }
 
   const product = await getProductByHandleId(handleId)
-  if (product) {
-    return NextResponse.json({ source: 'mongodb', product }, { headers: CACHE_HEADER })
-  }
+  if (!product) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  const siblings = await getSiblingsForHandleId(handleId).catch(() => [])
+  return NextResponse.json({ source: 'mongodb', product, siblings }, { headers: CACHE_HEADER })
 }
