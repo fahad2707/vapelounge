@@ -19,10 +19,14 @@ export async function GET() {
   if (block) return block
   try {
     const db = await getAdminDb()
+    // `allowDiskUse` is a belt-and-braces guard against Mongo's 32 MB in-memory
+    // sort limit. The compound index created in `ensureAdminIndexes` makes
+    // this sort index-driven so disk spill is never actually used in practice.
     const docs = await db
       .collection<ProductDoc>(COL.products)
       .find({}, { projection: { collectionRaw: 0 } })
       .sort({ updatedAt: -1, name: 1 })
+      .allowDiskUse(true)
       .limit(2000)
       .toArray()
     return NextResponse.json({ products: docs })
