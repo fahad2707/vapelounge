@@ -1,6 +1,6 @@
 import { getMongoClientPromise, getDbName } from '@/lib/mongodb'
 import { COL } from '@/lib/db/collections'
-import { docToCatalogProduct, type ProductDoc } from '@/lib/db/product-doc'
+import { docToCatalogProduct, docToCatalogProductSummary, type ProductDoc } from '@/lib/db/product-doc'
 
 /** Match visible products (first stage of shop pipelines). */
 const MATCH_VISIBLE = { $match: { visible: true } } as const
@@ -42,6 +42,25 @@ const ADD_SHOP_BRAND = {
 
 const PROJECT_DROP_SHOP_BRAND = { $project: { shopBrand: 0 } } as const
 
+/** Strip heavy Wix fields before serializing the shop list (609 full docs ≈ 30MB+ JSON). */
+const PROJECT_LIST_SUMMARY = {
+  $project: {
+    shopBrand: 0,
+    descriptionHtml: 0,
+    descriptionPlain: 0,
+    variants: 0,
+    images: 0,
+    collectionRaw: 0,
+    costPrice: 0,
+    quantity: 0,
+    categoryId: 0,
+    modelId: 0,
+    variantGroupId: 0,
+    createdAt: 0,
+    updatedAt: 0,
+  },
+} as const
+
 export async function listProducts(params: { brand?: string | null; limit: number; skip: number }) {
   const promise = getMongoClientPromise()
   if (!promise) return null
@@ -64,17 +83,19 @@ export async function listProducts(params: { brand?: string | null; limit: numbe
     { $sort: { name: 1 } as const },
     { $skip: params.skip },
     { $limit: params.limit },
-    PROJECT_DROP_SHOP_BRAND,
+    PROJECT_LIST_SUMMARY,
   ]
 
   const countPipeline = [...brandStages, { $count: 'n' }]
 
   const brandsPipeline = [MATCH_VISIBLE, ADD_SHOP_BRAND, { $group: { _id: '$shopBrand' } }, { $sort: { _id: 1 } }]
 
+  const aggOpts = { allowDiskUse: true } as const
+
   const [docs, countRows, brandAgg] = await Promise.all([
-    col.aggregate<ProductDoc>(listPipeline).toArray(),
-    col.aggregate<{ n: number }>(countPipeline).toArray(),
-    col.aggregate<{ _id: string }>(brandsPipeline).toArray(),
+    col.aggregate<ProductDoc>(listPipeline, aggOpts).toArray(),
+    col.aggregate<{ n: number }>(countPipeline, aggOpts).toArray(),
+    col.aggregate<{ _id: string }>(brandsPipeline, aggOpts).toArray(),
   ])
 
   const total = countRows[0]?.n ?? 0
@@ -87,7 +108,7 @@ export async function listProducts(params: { brand?: string | null; limit: numbe
   const brands = ['All brands', ...labels]
 
   return {
-    products: docs.map(docToCatalogProduct),
+    products: docs.map(docToCatalogProductSummary),
     total,
     brands,
   }

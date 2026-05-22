@@ -54,6 +54,28 @@ export function docToCatalogProduct(doc: ProductDoc): CatalogProduct {
   }
 }
 
+/** Lightweight shape for shop grid / list API (omits HTML, galleries, variants). */
+export function docToCatalogProductSummary(doc: ProductDoc): CatalogProduct {
+  return {
+    id: doc.handleId,
+    name: doc.name,
+    descriptionHtml: '',
+    descriptionPlain: '',
+    images: doc.image ? [doc.image] : [],
+    image: doc.image,
+    primaryCategory: doc.primaryCategory,
+    categories: doc.categories,
+    price: doc.price,
+    compareAtPrice: doc.compareAtPrice,
+    badge: doc.badge,
+    inStock: doc.inStock,
+    variants: [],
+    sku: doc.sku,
+    brand: doc.brand,
+    accentColor: doc.accentColor,
+  }
+}
+
 /** Category doc — top-level brand line (STLTH, Elfbar, Oxybar). */
 export interface CategoryDoc {
   _id?: ObjectId

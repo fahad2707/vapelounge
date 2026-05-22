@@ -49,6 +49,10 @@ async function createAdminIndexes(db: Db): Promise<void> {
       { updatedAt: -1, name: 1 },
       { name: 'admin_list_updatedAt_name' },
     ),
+    db.collection(COL.products).createIndex(
+      { visible: 1, name: 1 },
+      { name: 'shop_visible_name' },
+    ),
     db.collection(COL.categories).createIndex(
       { featured: -1, name: 1 },
       { name: 'admin_list_featured_name' },

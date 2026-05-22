@@ -227,6 +227,18 @@ export default function Shop() {
   const [vis, setVis] = useState(36)
   const [loaded, setLoaded] = useState(false)
   const [modalProduct, setModalProduct] = useState<CatalogProduct | null>(null)
+
+  const openProduct = async (summary: CatalogProduct) => {
+    setModalProduct(summary)
+    try {
+      const r = await fetch(`/api/products/${encodeURIComponent(summary.id)}`, { cache: 'no-store' })
+      if (!r.ok) return
+      const j = (await r.json()) as { product?: CatalogProduct }
+      if (j.product) setModalProduct(j.product)
+    } catch {
+      /* keep summary in modal */
+    }
+  }
   const [brandSheet, setBrandSheet] = useState(false)
   const [emptyHint, setEmptyHint] = useState<string | null>(null)
   const { dispatch } = useCart()
@@ -375,7 +387,7 @@ export default function Shop() {
 
           <div className="pgrid">
             {products.slice(0, vis).map(p => (
-              <ProductCard key={p.id} p={p} onOpen={() => setModalProduct(p)} />
+              <ProductCard key={p.id} p={p} onOpen={() => void openProduct(p)} />
             ))}
           </div>
 

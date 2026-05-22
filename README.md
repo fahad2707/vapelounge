@@ -69,7 +69,15 @@ vercel
 3. Import your GitHub repo → click **Deploy**
    - Framework: **Next.js** (auto-detected)
    - Build command: `next build` (auto-filled)
-   - No env vars needed
+
+4. **Environment variables** (Vercel → Project → Settings → Environment Variables → Production):
+   - `MONGODB_URI` — Atlas connection string (`mongodb+srv://USER:PASS@cluster…`)
+   - `MONGODB_DB_NAME` — optional (default: `vapelounge`)
+   - In **Atlas → Network Access**, allow `0.0.0.0/0` (or Vercel IP ranges) so serverless can connect
+   - If the DB password contains `@ : / ? #`, **URL-encode** it inside `MONGODB_URI`
+   - **Redeploy** after changing env vars
+
+5. Seed the catalog once (same URI as production): `npm run db:seed`
 
 That's it — live in ~2 minutes ✅
 

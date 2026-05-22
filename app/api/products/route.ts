@@ -86,14 +86,34 @@ export async function GET(req: Request) {
     )
   } catch (err) {
     console.error('[api/products]', err)
+    const msg = err instanceof Error ? err.message : String(err)
+    const sortLimit = /sort exceeded memory limit/i.test(msg)
+    const timeout = /timed out|timeout/i.test(msg)
+    const auth = /authentication failed|bad auth|invalid.*password/i.test(msg)
+    const network = /ENOTFOUND|ECONNREFUSED|Server selection|failed to connect/i.test(msg)
+
+    let hint =
+      'Catalog query failed. Check Vercel → Logs for the exact error, then redeploy after fixing.'
+    if (sortLimit) {
+      hint =
+        'Catalog query exceeded MongoDB memory limits. Redeploy the latest build (slim product list) or reduce ?limit= on /api/products.'
+    } else if (timeout) {
+      hint = 'MongoDB timed out. Confirm Atlas cluster is running and MONGODB_URI is set on Vercel (Production).'
+    } else if (auth) {
+      hint =
+        'MongoDB rejected the credentials. In Vercel, update MONGODB_URI with the correct Atlas user/password (URL-encode special characters in the password).'
+    } else if (network) {
+      hint =
+        'Could not reach MongoDB. In Atlas: Network Access → allow 0.0.0.0/0 (all IPs) or Vercel’s ranges; confirm MONGODB_URI is correct and the password is URL-encoded if it contains @ : / ? # etc.'
+    }
+
     return NextResponse.json(
       {
         source: 'error' as const,
         products: [],
         total: 0,
         brands: ['All brands'],
-        message:
-          'Could not reach MongoDB. In Atlas: Network Access → allow 0.0.0.0/0 (all IPs) or Vercel’s ranges; confirm the password in MONGODB_URI is URL-encoded if it contains @ : / ? # etc.',
+        message: hint,
       },
       { status: 503, headers: CACHE_HEADER },
     )
