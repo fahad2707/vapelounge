@@ -4,8 +4,11 @@ import { useEffect, useRef, useState } from 'react'
 import type { CatalogProduct } from '@/lib/catalog/types'
 import { formatCad } from '@/lib/currency'
 import { useCart } from '@/lib/store'
+import { catalogToWishlist, useWishlist } from '@/lib/wishlist'
 import ProductModal from './ProductModal'
 import { useToast } from './Toast'
+
+const PAGE_SIZE = 300
 
 function badgeClass(badge: string | null): string {
   if (!badge) return ''
@@ -31,7 +34,9 @@ function ProductCard({
   onOpen: () => void
 }) {
   const { dispatch } = useCart()
+  const { dispatch: wlDispatch, isSaved } = useWishlist()
   const toast = useToast()
+  const saved = isSaved(p.id)
   const bClass = badgeClass(p.badge)
   const accent = p.accentColor || 'var(--gold)'
 
@@ -133,16 +138,6 @@ function ProductCard({
             />
           </div>
         </button>
-        <button
-          type="button"
-          className="pc-wl"
-          onClick={e => {
-            e.stopPropagation()
-            toast('Saved to wishlist')
-          }}
-        >
-          ♡
-        </button>
       </div>
 
       <div style={{ padding: '14px 16px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -183,29 +178,44 @@ function ProductCard({
               <span style={{ fontSize: 11, color: 'var(--fog2)', textDecoration: 'line-through' }}>{formatCad(p.compareAtPrice)}</span>
             )}
           </div>
-          <button
-            type="button"
-            className="pc-atc"
-            disabled={!p.inStock}
-            onClick={e => {
-              e.stopPropagation()
-              if (!p.inStock) return
-              dispatch({
-                type: 'ADD',
-                item: {
-                  id: p.id,
-                  emoji: '🛒',
-                  name: p.name,
-                  cat: p.primaryCategory,
-                  price: p.price,
-                  label: formatCad(p.price),
-                },
-              })
-              toast(`${p.name} added to cart`)
-            }}
-          >
-            {p.inStock ? '+ Cart' : 'Out of stock'}
-          </button>
+          <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+            <button
+              type="button"
+              className={`pc-wl-btn${saved ? ' on' : ''}`}
+              aria-pressed={saved}
+              aria-label={saved ? 'Remove from wishlist' : 'Add to wishlist'}
+              onClick={e => {
+                e.stopPropagation()
+                wlDispatch({ type: 'TOGGLE', item: catalogToWishlist(p) })
+                toast(saved ? 'Removed from wishlist' : 'Saved to wishlist')
+              }}
+            >
+              {saved ? '♥' : '♡'}
+            </button>
+            <button
+              type="button"
+              className="pc-atc"
+              disabled={!p.inStock}
+              onClick={e => {
+                e.stopPropagation()
+                if (!p.inStock) return
+                dispatch({
+                  type: 'ADD',
+                  item: {
+                    id: p.id,
+                    emoji: '🛒',
+                    name: p.name,
+                    cat: p.primaryCategory,
+                    price: p.price,
+                    label: formatCad(p.price),
+                  },
+                })
+                toast(`${p.name} added to cart`)
+              }}
+            >
+              {p.inStock ? '+ Cart' : 'Out of stock'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -258,74 +268,69 @@ export default function Shop() {
 
   useEffect(() => {
     const ac = new AbortController()
+
+    async function fetchProductsPage(skip: number): Promise<ProductsResponse> {
+      const q = new URLSearchParams()
+      q.set('limit', String(PAGE_SIZE))
+      q.set('skip', String(skip))
+      q.set('skipBrands', '1')
+      if (brandFilt && brandFilt !== 'All brands') q.set('brand', brandFilt)
+      const r = await fetch(`/api/products?${q.toString()}`, { signal: ac.signal })
+      return (await r.json().catch(() => ({ products: [] }))) as ProductsResponse
+    }
+
     setLoaded(false)
     setEmptyHint(null)
+    setProducts([])
+
     ;(async () => {
       try {
-        const q = new URLSearchParams()
-        q.set('limit', '2000')
-        if (brandFilt && brandFilt !== 'All brands') q.set('brand', brandFilt)
-        if (brandsCached.current) q.set('skipBrands', '1')
-        const r = await fetch(`/api/products?${q.toString()}`, { signal: ac.signal })
-        let data: ProductsResponse = { products: [] }
-        try {
-          data = (await r.json()) as ProductsResponse
-        } catch {
-          /* ignore */
+        if (!brandsCached.current) {
+          const br = await fetch('/api/products/brands', { signal: ac.signal })
+          if (br.ok) {
+            const bj = (await br.json()) as { brands?: string[] }
+            if (bj.brands?.length) {
+              setBrands(bj.brands)
+              brandsCached.current = true
+            }
+          }
         }
+
+        const first = await fetchProductsPage(0)
         if (ac.signal.aborted) return
 
-        if (!r.ok) {
-          setProducts([])
-          setBrands(['All brands'])
-          setEmptyHint(
-            data.message ||
-              'Could not load the catalog. Open Vercel → your project → Logs, or check MongoDB Atlas.',
-          )
+        if (!first.products?.length && first.source === 'error') {
+          setEmptyHint(first.message || 'Could not load catalog.')
+          setLoaded(true)
           return
         }
 
-        if (Array.isArray(data.products)) {
-          setProducts(prev => {
-            const next = data.products
-            if (prev.length === 0) return shuffle(next)
-            return next
-          })
-        }
-        if (data.brands?.length) {
-          setBrands(data.brands)
-          brandsCached.current = true
-        }
+        let all = Array.isArray(first.products) ? shuffle(first.products) : []
+        const total = first.total ?? all.length
+        setProducts(all)
+        setLoaded(true)
 
-        if (Array.isArray(data.products) && data.products.length === 0) {
-          if (data.source === 'no_database') {
-            setEmptyHint(
-              data.message ||
-                'Add MONGODB_URI in Vercel (Production) and redeploy. Optional: MONGODB_DB_NAME must match what you used when seeding.',
-            )
-          } else if (data.source === 'empty') {
-            setEmptyHint(
-              data.message ||
-                'Database is connected but empty. Run npm run db:seed locally using the same URI as production.',
-            )
-          } else if (data.source === 'error') {
-            setEmptyHint(data.message || 'Database error.')
-          } else {
-            setEmptyHint(data.message || 'No products match this filter.')
-          }
-        } else {
-          setEmptyHint(null)
+        if (all.length === 0) {
+          setEmptyHint(first.message || 'No products match this filter.')
+          return
+        }
+        setEmptyHint(null)
+
+        let skip = all.length
+        while (skip < total && !ac.signal.aborted) {
+          const next = await fetchProductsPage(skip)
+          if (!next.products?.length) break
+          all = all.concat(next.products)
+          skip = all.length
+          setProducts(all)
         }
       } catch (e) {
         if (e instanceof Error && e.name === 'AbortError') return
-        if (!ac.signal.aborted) {
-          setProducts([])
-          setEmptyHint('Network error while loading products. Try refreshing the page.')
-        }
-      } finally {
-        if (!ac.signal.aborted) setLoaded(true)
+        setEmptyHint('Network error while loading products. Try refreshing the page.')
+        setLoaded(true)
       }
     })()
+
     return () => ac.abort()
   }, [brandFilt])
 
@@ -509,7 +514,22 @@ export default function Shop() {
           background:transparent; color:var(--cream); font-size:14px; cursor:pointer;
         }
         .shop-sheet-row.on { color:var(--gold); }
-        .pc-wl { z-index:4; }
+        .pc-wl-btn {
+          padding: 6px 10px;
+          border: 1px solid var(--line2);
+          border-radius: 2px;
+          font-size: 14px;
+          line-height: 1;
+          color: var(--fog);
+          background: transparent;
+          cursor: pointer;
+          transition: border-color .22s, color .22s, background .22s;
+        }
+        .pc-wl-btn:hover, .pc-wl-btn.on {
+          border-color: var(--gold);
+          color: var(--gold);
+          background: var(--gold-a10);
+        }
         @media(max-width:768px){
           #shop.shop-root { padding:70px 16px 88px!important; }
           .shop-layout { flex-direction:column; gap:0; }

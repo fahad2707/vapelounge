@@ -3,11 +3,16 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useCallback } from 'react'
 
-const NAV = [
+const NAV_CATALOG = [
   { href: '/admin/products', label: 'Products' },
   { href: '/admin/categories', label: 'Categories' },
   { href: '/admin/models', label: 'Models' },
   { href: '/admin/variants', label: 'Variants' },
+]
+
+const NAV_STORE = [
+  { href: '/admin/orders', label: 'Online orders' },
+  { href: '/admin/users', label: 'Users' },
 ]
 
 export default function AdminShell({
@@ -41,7 +46,18 @@ export default function AdminShell({
         </div>
 
         <div className="adm-nav-h">Catalogue</div>
-        {NAV.map(n => {
+        {NAV_CATALOG.map(n => {
+          const active = pathname === n.href || pathname.startsWith(n.href + '/')
+          return (
+            <Link key={n.href} href={n.href} className={`adm-nav-link${active ? ' on' : ''}`}>
+              <span aria-hidden style={{ width: 18 }}>{labelIcon(n.label)}</span>
+              {n.label}
+            </Link>
+          )
+        })}
+
+        <div className="adm-nav-h" style={{ marginTop: 16 }}>Store</div>
+        {NAV_STORE.map(n => {
           const active = pathname === n.href || pathname.startsWith(n.href + '/')
           return (
             <Link key={n.href} href={n.href} className={`adm-nav-link${active ? ' on' : ''}`}>
@@ -74,7 +90,9 @@ function labelIcon(label: string): string {
     case 'Products':   return '📦'
     case 'Categories': return '🗂'
     case 'Models':     return '🧩'
-    case 'Variants':   return '🎨'
-    default:           return '•'
+    case 'Variants':       return '🎨'
+    case 'Online orders':  return '🧾'
+    case 'Users':          return '👤'
+    default:               return '•'
   }
 }

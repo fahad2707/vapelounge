@@ -3,6 +3,7 @@ import Cursor        from '@/components/Cursor'
 import Loader        from '@/components/Loader'
 import Nav           from '@/components/Nav'
 import CartDrawer    from '@/components/CartDrawer'
+import WishlistDrawer from '@/components/WishlistDrawer'
 import Hero          from '@/components/Hero'
 import Ticker        from '@/components/Ticker'
 import About         from '@/components/About'
@@ -29,6 +30,7 @@ export default function Home() {
       <Loader />
       <Nav />
       <CartDrawer />
+      <WishlistDrawer />
       <ScrollManager />
       <main>
         <Hero />

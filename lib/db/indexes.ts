@@ -44,5 +44,8 @@ async function createDbIndexes(db: Db): Promise<void> {
       { name: 1 },
       { name: 'admin_list_name' },
     ),
+    db.collection(COL.orders).createIndex({ createdAt: -1 }, { name: 'orders_createdAt' }),
+    db.collection(COL.users).createIndex({ email: 1 }, { unique: true, name: 'users_email' }),
+    db.collection(COL.users).createIndex({ createdAt: -1 }, { name: 'users_createdAt' }),
   ])
 }

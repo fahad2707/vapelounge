@@ -20,6 +20,7 @@ type Action =
   | { type: 'ADD'; item: Omit<CartItem, 'qty'> }
   | { type: 'REMOVE'; id: string }
   | { type: 'QTY'; id: string; delta: number }
+  | { type: 'CLEAR' }
   | { type: 'OPEN' }
   | { type: 'CLOSE' }
 
@@ -38,6 +39,7 @@ function reducer(state: CartState, action: Action): CartState {
       const updated = state.items.map(i => i.id === action.id ? { ...i, qty: i.qty + action.delta } : i).filter(i => i.qty > 0)
       return { ...state, items: updated }
     }
+    case 'CLEAR': return { ...state, items: [] }
     case 'OPEN':  return { ...state, open: true }
     case 'CLOSE': return { ...state, open: false }
     default: return state

@@ -7,6 +7,12 @@ import { randSuffix, slugify } from '@/lib/admin/slug'
 import type { CategoryDoc, ProductDoc } from '@/lib/db/product-doc'
 import { ADMIN_PRODUCT_LIST_PROJECTION } from '@/lib/server/brand-filter'
 
+function parseIntSafe(v: string | null, fallback: number, min: number, max: number) {
+  const n = Number.parseInt(v ?? '', 10)
+  if (!Number.isFinite(n)) return fallback
+  return Math.min(max, Math.max(min, n))
+}
+
 async function categoryNameFor(db: Awaited<ReturnType<typeof getAdminDb>>, id: string | null | undefined): Promise<string | null> {
   if (!id) return null
   let oid: ObjectId
@@ -15,21 +21,58 @@ async function categoryNameFor(db: Awaited<ReturnType<typeof getAdminDb>>, id: s
   return cat?.name ?? null
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   const block = await requireAdmin()
   if (block) return block
+  const { searchParams } = new URL(req.url)
+  const limit = parseIntSafe(searchParams.get('limit'), 120, 20, 500)
+  const skip = parseIntSafe(searchParams.get('skip'), 0, 0, 50_000)
+  const q = searchParams.get('q')?.trim().toLowerCase() || ''
+
   try {
     const db = await getAdminDb()
-    // `allowDiskUse` is a belt-and-braces guard against Mongo's 32 MB in-memory
-    // sort limit. The compound index created in `ensureAdminIndexes` makes
-    // this sort index-driven so disk spill is never actually used in practice.
-    const docs = await db
-      .collection<ProductDoc>(COL.products)
-      .find({}, { projection: ADMIN_PRODUCT_LIST_PROJECTION })
-      .sort({ updatedAt: -1, name: 1 })
-      .limit(2000)
-      .toArray()
-    return NextResponse.json({ products: docs })
+    const col = db.collection<ProductDoc>(COL.products)
+    const filter = q
+      ? {
+          $or: [
+            { name: { $regex: q, $options: 'i' } },
+            { sku: { $regex: q, $options: 'i' } },
+            { brand: { $regex: q, $options: 'i' } },
+            { primaryCategory: { $regex: q, $options: 'i' } },
+          ],
+        }
+      : {}
+
+    const [docs, total] = await Promise.all([
+      col
+        .find(filter, { projection: ADMIN_PRODUCT_LIST_PROJECTION })
+        .sort({ updatedAt: -1, name: 1 })
+        .skip(skip)
+        .limit(limit)
+        .toArray(),
+      col.countDocuments(filter),
+    ])
+
+    return NextResponse.json({
+      products: docs.map(d => ({
+        handleId: d.handleId,
+        name: d.name,
+        sku: d.sku ?? null,
+        image: d.image || '',
+        images: d.image ? [d.image] : [],
+        price: d.price,
+        visible: d.visible !== false,
+        inStock: d.inStock !== false,
+        primaryCategory: d.primaryCategory,
+        brand: d.brand ?? null,
+        descriptionPlain: '',
+        categoryId: d.categoryId ?? null,
+        modelId: d.modelId ?? null,
+      })),
+      total,
+      limit,
+      skip,
+    })
   } catch (err) {
     console.error('[admin/products GET]', err)
     return NextResponse.json({ error: (err as Error).message }, { status: 500 })

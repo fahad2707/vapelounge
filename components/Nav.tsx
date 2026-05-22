@@ -2,6 +2,7 @@
 import Image from 'next/image'
 import { useState, useEffect } from 'react'
 import { useCart } from '@/lib/store'
+import { useWishlist } from '@/lib/wishlist'
 
 const LINKS = [
   { href: '#about',      label: 'About'      },
@@ -14,7 +15,9 @@ export default function Nav() {
   const [stuck,   setStuck]   = useState(false)
   const [mobOpen, setMobOpen] = useState(false)
   const { state, dispatch } = useCart()
+  const { state: wlState, dispatch: wlDispatch } = useWishlist()
   const totalQty = state.items.reduce((s, i) => s + i.qty, 0)
+  const wlCount = wlState.items.length
 
   useEffect(() => {
     const fn = () => setStuck(window.scrollY > 55)
@@ -62,6 +65,22 @@ export default function Nav() {
         </div>
 
         <div style={{display:'flex',alignItems:'center',gap:12,flexShrink:0}}>
+          <button
+            type="button"
+            className="nav-wishlist-btn"
+            onClick={() => wlDispatch({ type: 'OPEN' })}
+            style={{
+              display:'flex',alignItems:'center',gap:6,border:'1px solid var(--line)',
+              padding:'8px 14px',fontSize:11,letterSpacing:'.12em',textTransform:'uppercase',
+              color:'rgba(246,242,234,.7)',transition:'border-color .3s,color .3s',position:'relative',
+            }}
+            aria-label="Wishlist"
+          >
+            ♡ Wishlist
+            {wlCount > 0 && (
+              <span style={{position:'absolute',top:-7,right:-7,width:17,height:17,borderRadius:'50%',background:'var(--gold)',color:'var(--ink)',fontSize:9,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center'}}>{wlCount}</span>
+            )}
+          </button>
           <button className="nav-cart-btn" onClick={()=>dispatch({type:'OPEN'})} style={{
             display:'flex',alignItems:'center',gap:7,border:'1px solid var(--line)',
             padding:'8px 18px',fontSize:11,letterSpacing:'.12em',textTransform:'uppercase',
@@ -128,7 +147,7 @@ export default function Nav() {
           }
           .nav-mid-desktop{ display:none!important; }
           #ham-btn{ display:flex!important; }
-          .nav-cart-btn{ display:none!important; }
+          .nav-cart-btn, .nav-wishlist-btn{ display:none!important; }
         }
         @media(min-width:769px){ #ham-btn{ display:none!important; } }
       `}</style>

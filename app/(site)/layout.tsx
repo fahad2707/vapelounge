@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import '../globals.css'
-import { CartProvider } from '@/lib/store'
+import { AppProviders } from '@/lib/providers'
 
 export const metadata: Metadata = {
   title: 'VapeLounge — Premium Vape Store Canada',
@@ -17,9 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,700;1,400;1,500&family=Outfit:wght@200;300;400;500;600&display=swap" rel="stylesheet" />
       </head>
       <body>
-        <CartProvider>
-          {children}
-        </CartProvider>
+        <AppProviders>{children}</AppProviders>
       </body>
     </html>
   )

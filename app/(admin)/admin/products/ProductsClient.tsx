@@ -52,40 +52,45 @@ export default function ProductsClient() {
   const [submitErr, setSubmitErr] = useState<string | null>(null)
   const [savedToast, setSavedToast] = useState<string | null>(null)
 
+  const [total, setTotal] = useState(0)
+
   const load = useCallback(async () => {
     setLoading(true)
     setLoadErr(null)
     try {
-      const r = await fetch('/api/admin/products', { cache: 'no-store' })
-      const j = (await r.json().catch(() => ({}))) as { products?: AdminProduct[]; error?: string }
+      const params = new URLSearchParams()
+      params.set('limit', '200')
+      params.set('skip', '0')
+      if (q.trim()) params.set('q', q.trim())
+      const r = await fetch(`/api/admin/products?${params}`, { cache: 'no-store' })
+      const j = (await r.json().catch(() => ({}))) as {
+        products?: AdminProduct[]
+        total?: number
+        error?: string
+      }
       if (!r.ok) {
         setLoadErr(j.error || 'Failed to load products.')
         setProducts([])
+        setTotal(0)
       } else {
         setProducts(j.products || [])
+        setTotal(j.total ?? j.products?.length ?? 0)
       }
     } catch {
       setLoadErr('Network error while loading products.')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [q])
 
-  useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    const t = window.setTimeout(() => void load(), q.trim() ? 280 : 0)
+    return () => window.clearTimeout(t)
+  }, [load, q])
 
   const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase()
-    return products.filter(p => {
-      if (!showHidden && !p.visible) return false
-      if (!needle) return true
-      return (
-        p.name.toLowerCase().includes(needle) ||
-        (p.sku || '').toLowerCase().includes(needle) ||
-        (p.brand || '').toLowerCase().includes(needle) ||
-        p.handleId.toLowerCase().includes(needle)
-      )
-    })
-  }, [products, q, showHidden])
+    return products.filter(p => showHidden || p.visible)
+  }, [products, showHidden])
 
   const toggleHidden = useCallback(async (p: AdminProduct) => {
     const next = !p.visible
