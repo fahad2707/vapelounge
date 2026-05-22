@@ -10,19 +10,25 @@ interface Category {
   name: string
   image: string | null
   featured: boolean
+  shopDisplay: boolean
+  shopDisplayOrder: number
+  productCount: number
 }
 
 const MAX_FEATURED = 6
+const MAX_SHOP_DISPLAY = 10
 
 export default function CategoriesClient() {
   const [items, setItems] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
+  const [syncNote, setSyncNote] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<Category | null>(null)
   const [name, setName] = useState('')
   const [images, setImages] = useState<string[]>([])
   const [featured, setFeatured] = useState(false)
+  const [shopDisplay, setShopDisplay] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [formErr, setFormErr] = useState<string | null>(null)
 
@@ -31,22 +37,51 @@ export default function CategoriesClient() {
     setErr(null)
     try {
       const r = await fetch('/api/admin/categories', { cache: 'no-store' })
-      const j = (await r.json().catch(() => ({}))) as { categories?: Category[]; error?: string }
-      if (!r.ok) { setErr(j.error || 'Failed to load categories.'); setItems([]) }
-      else setItems(j.categories || [])
-    } catch { setErr('Network error.') }
-    finally { setLoading(false) }
+      const j = (await r.json().catch(() => ({}))) as {
+        categories?: Category[]
+        synced?: number
+        error?: string
+      }
+      if (!r.ok) {
+        setErr(j.error || 'Failed to load categories.')
+        setItems([])
+      } else {
+        setItems(j.categories || [])
+        if (typeof j.synced === 'number' && j.synced > 0) {
+          setSyncNote(`Synced ${j.synced} new line(s) from the product catalogue.`)
+        } else {
+          setSyncNote('All catalogue lines are listed below (synced from products + admin entries).')
+        }
+      }
+    } catch {
+      setErr('Network error.')
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   useEffect(() => { void load() }, [load])
 
   const featuredCount = items.filter(i => i.featured).length
+  const shopDisplayCount = items.filter(i => i.shopDisplay).length
 
   const openAdd = () => {
-    setEditing(null); setName(''); setImages([]); setFeatured(false); setFormErr(null); setOpen(true)
+    setEditing(null)
+    setName('')
+    setImages([])
+    setFeatured(false)
+    setShopDisplay(false)
+    setFormErr(null)
+    setOpen(true)
   }
   const openEdit = (c: Category) => {
-    setEditing(c); setName(c.name); setImages(c.image ? [c.image] : []); setFeatured(c.featured); setFormErr(null); setOpen(true)
+    setEditing(c)
+    setName(c.name)
+    setImages(c.image ? [c.image] : [])
+    setFeatured(c.featured)
+    setShopDisplay(c.shopDisplay)
+    setFormErr(null)
+    setOpen(true)
   }
 
   const save = useCallback(async () => {
@@ -62,39 +97,59 @@ export default function CategoriesClient() {
           name,
           image: images[0] || null,
           featured,
+          shopDisplay,
         }),
       })
       const j = (await r.json().catch(() => ({}))) as { error?: string }
-      if (!r.ok) { setFormErr(j.error || 'Could not save.'); setSubmitting(false); return }
+      if (!r.ok) {
+        setFormErr(j.error || 'Could not save.')
+        setSubmitting(false)
+        return
+      }
       setOpen(false)
       void load()
-    } catch { setFormErr('Network error.') }
-    finally { setSubmitting(false) }
-  }, [editing, name, images, featured, load])
+    } catch {
+      setFormErr('Network error.')
+    } finally {
+      setSubmitting(false)
+    }
+  }, [editing, name, images, featured, shopDisplay, load])
 
   const remove = useCallback(async (c: Category) => {
     if (!window.confirm(`Delete category "${c.name}"?`)) return
     try {
       const r = await fetch(`/api/admin/categories/${c.id}`, { method: 'DELETE' })
       const j = (await r.json().catch(() => ({}))) as { error?: string }
-      if (!r.ok) { setErr(j.error || 'Could not delete.'); return }
+      if (!r.ok) {
+        setErr(j.error || 'Could not delete.')
+        return
+      }
       void load()
-    } catch { setErr('Network error.') }
+    } catch {
+      setErr('Network error.')
+    }
   }, [load])
 
-  const toggleFeatured = useCallback(async (c: Category) => {
-    const next = !c.featured
-    try {
-      const r = await fetch(`/api/admin/categories/${c.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ featured: next }),
-      })
-      const j = (await r.json().catch(() => ({}))) as { error?: string }
-      if (!r.ok) { setErr(j.error || 'Could not update.'); return }
-      void load()
-    } catch { setErr('Network error.') }
-  }, [load])
+  const patchFlag = useCallback(
+    async (c: Category, patch: { featured?: boolean; shopDisplay?: boolean }) => {
+      try {
+        const r = await fetch(`/api/admin/categories/${c.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(patch),
+        })
+        const j = (await r.json().catch(() => ({}))) as { error?: string }
+        if (!r.ok) {
+          setErr(j.error || 'Could not update.')
+          return
+        }
+        void load()
+      } catch {
+        setErr('Network error.')
+      }
+    },
+    [load],
+  )
 
   return (
     <>
@@ -102,10 +157,10 @@ export default function CategoriesClient() {
         <div>
           <div className="adm-page-title">Categories</div>
           <div className="adm-page-sub">
-            Top-level brand lines. Mark up to {MAX_FEATURED} as <strong>Featured</strong> to show them on the homepage carousel.
-            {' '}<span style={{ color: featuredCount >= MAX_FEATURED ? '#92400E' : '#475569' }}>
-              {featuredCount}/{MAX_FEATURED} featured
-            </span>
+            All brand lines from your catalogue (auto-synced from products). Mark up to{' '}
+            <strong>{MAX_FEATURED}</strong> as <strong>Homepage carousel</strong> and up to{' '}
+            <strong>{MAX_SHOP_DISPLAY}</strong> as <strong>Shop showcase</strong> (horizontal rails after
+            &quot;Load more&quot;).
           </div>
         </div>
         <button type="button" className="adm-btn adm-btn-primary" onClick={openAdd}>
@@ -113,73 +168,118 @@ export default function CategoriesClient() {
         </button>
       </div>
 
+      {syncNote && !err && (
+        <div style={{ marginBottom: 12, fontSize: 12.5, color: '#475569' }}>{syncNote}</div>
+      )}
       {err && <div className="adm-error" style={{ marginBottom: 14 }}>{err}</div>}
+
+      <div style={{ display: 'flex', gap: 16, marginBottom: 14, flexWrap: 'wrap', fontSize: 12.5 }}>
+        <span style={{ color: featuredCount >= MAX_FEATURED ? '#92400E' : '#475569' }}>
+          Homepage carousel: {featuredCount}/{MAX_FEATURED}
+        </span>
+        <span style={{ color: shopDisplayCount >= MAX_SHOP_DISPLAY ? '#92400E' : '#475569' }}>
+          Shop showcase: {shopDisplayCount}/{MAX_SHOP_DISPLAY}
+        </span>
+      </div>
 
       <div className="adm-card">
         {loading ? (
           <div className="adm-card-pad" style={{ color: '#64748B' }}>Loading…</div>
         ) : items.length === 0 ? (
           <div className="adm-card-pad" style={{ color: '#64748B', textAlign: 'center' }}>
-            No categories yet. Add your first one.
+            No categories found. Add products or create a category manually.
           </div>
         ) : (
-          <table className="adm-table">
-            <thead>
-              <tr>
-                <th style={{ width: 64 }}></th>
-                <th>Name</th>
-                <th>Slug</th>
-                <th style={{ width: 130 }}>Homepage</th>
-                <th style={{ width: 230, textAlign: 'right' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map(c => (
-                <tr key={c.id}>
-                  <td>
-                    <div
-                      style={{
-                        width: 44, height: 44, borderRadius: 8, overflow: 'hidden',
-                        background: '#F1F5F9', display: 'grid', placeItems: 'center', fontSize: 18, color: '#94A3B8',
-                      }}
-                    >
-                      {c.image
-                        /* eslint-disable-next-line @next/next/no-img-element */
-                        ? <img src={c.image} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        : '🗂'}
-                    </div>
-                  </td>
-                  <td style={{ fontWeight: 500 }}>
-                    <Link href={`/admin/categories/${c.id}`} style={{ color: '#0F172A' }}>
-                      {c.name}
-                    </Link>
-                  </td>
-                  <td style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace', fontSize: 12.5, color: '#475569' }}>
-                    {c.slug}
-                  </td>
-                  <td>
-                    <button
-                      type="button"
-                      onClick={() => toggleFeatured(c)}
-                      className={`adm-pill ${c.featured ? 'visible' : 'muted'}`}
-                      style={{ border: 'none', cursor: 'pointer' }}
-                      disabled={!c.featured && featuredCount >= MAX_FEATURED}
-                      title={!c.featured && featuredCount >= MAX_FEATURED ? `Maximum ${MAX_FEATURED} featured` : ''}
-                    >
-                      {c.featured ? '★ Featured' : 'Not featured'}
-                    </button>
-                  </td>
-                  <td style={{ textAlign: 'right' }}>
-                    <Link href={`/admin/categories/${c.id}`} className="adm-btn adm-btn-ghost adm-btn-sm" style={{ marginRight: 6 }}>
-                      Open
-                    </Link>
-                    <button className="adm-btn adm-btn-ghost adm-btn-sm" onClick={() => openEdit(c)}>Edit</button>
-                    <button className="adm-btn adm-btn-danger adm-btn-sm" style={{ marginLeft: 6 }} onClick={() => remove(c)}>Delete</button>
-                  </td>
+          <div style={{ overflowX: 'auto' }}>
+            <table className="adm-table">
+              <thead>
+                <tr>
+                  <th style={{ width: 64 }}></th>
+                  <th>Name</th>
+                  <th style={{ width: 72 }}>Products</th>
+                  <th style={{ width: 130 }}>Carousel</th>
+                  <th style={{ width: 140 }}>Shop showcase</th>
+                  <th style={{ width: 200, textAlign: 'right' }}>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {items.map(c => (
+                  <tr key={c.id}>
+                    <td>
+                      <div
+                        style={{
+                          width: 44,
+                          height: 44,
+                          borderRadius: 8,
+                          overflow: 'hidden',
+                          background: '#F1F5F9',
+                          display: 'grid',
+                          placeItems: 'center',
+                          fontSize: 18,
+                          color: '#94A3B8',
+                        }}
+                      >
+                        {c.image
+                          /* eslint-disable-next-line @next/next/no-img-element */
+                          ? <img src={c.image} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          : '🗂'}
+                      </div>
+                    </td>
+                    <td style={{ fontWeight: 500 }}>
+                      <Link href={`/admin/categories/${c.id}`} style={{ color: '#0F172A' }}>
+                        {c.name}
+                      </Link>
+                      <div style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace', fontSize: 11, color: '#94A3B8' }}>
+                        {c.slug}
+                      </div>
+                    </td>
+                    <td style={{ color: '#475569', fontSize: 13 }}>{c.productCount}</td>
+                    <td>
+                      <button
+                        type="button"
+                        onClick={() => patchFlag(c, { featured: !c.featured })}
+                        className={`adm-pill ${c.featured ? 'visible' : 'muted'}`}
+                        style={{ border: 'none', cursor: 'pointer' }}
+                        disabled={!c.featured && featuredCount >= MAX_FEATURED}
+                        title={!c.featured && featuredCount >= MAX_FEATURED ? `Maximum ${MAX_FEATURED}` : ''}
+                      >
+                        {c.featured ? '★ On' : 'Off'}
+                      </button>
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        onClick={() => patchFlag(c, { shopDisplay: !c.shopDisplay })}
+                        className={`adm-pill ${c.shopDisplay ? 'visible' : 'muted'}`}
+                        style={{ border: 'none', cursor: 'pointer' }}
+                        disabled={!c.shopDisplay && shopDisplayCount >= MAX_SHOP_DISPLAY}
+                        title={
+                          !c.shopDisplay && shopDisplayCount >= MAX_SHOP_DISPLAY
+                            ? `Maximum ${MAX_SHOP_DISPLAY}`
+                            : ''
+                        }
+                      >
+                        {c.shopDisplay ? '★ On' : 'Off'}
+                      </button>
+                    </td>
+                    <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <Link href={`/admin/categories/${c.id}`} className="adm-btn adm-btn-ghost adm-btn-sm" style={{ marginRight: 6 }}>
+                        Open
+                      </Link>
+                      <button className="adm-btn adm-btn-ghost adm-btn-sm" onClick={() => openEdit(c)}>Edit</button>
+                      <button
+                        className="adm-btn adm-btn-danger adm-btn-sm"
+                        style={{ marginLeft: 6 }}
+                        onClick={() => remove(c)}
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
@@ -190,7 +290,9 @@ export default function CategoriesClient() {
           maxWidth={560}
           footer={
             <>
-              <button type="button" className="adm-btn adm-btn-ghost" disabled={submitting} onClick={() => setOpen(false)}>Cancel</button>
+              <button type="button" className="adm-btn adm-btn-ghost" disabled={submitting} onClick={() => setOpen(false)}>
+                Cancel
+              </button>
               <button
                 type="button"
                 className="adm-btn adm-btn-primary"
@@ -204,7 +306,9 @@ export default function CategoriesClient() {
         >
           <div className="adm-form-grid">
             <div>
-              <label className="adm-label" htmlFor="cat-name">Name<span className="req">*</span></label>
+              <label className="adm-label" htmlFor="cat-name">
+                Name<span className="req">*</span>
+              </label>
               <input
                 id="cat-name"
                 className="adm-input"
@@ -216,19 +320,28 @@ export default function CategoriesClient() {
             </div>
 
             <div>
-              <label className="adm-label">Category picture <span style={{ color: '#94A3B8', fontWeight: 400 }}>· shown on homepage wheel</span></label>
+              <label className="adm-label">
+                Category picture{' '}
+                <span style={{ color: '#94A3B8', fontWeight: 400 }}>· homepage carousel</span>
+              </label>
               <ImageDrop value={images} onChange={setImages} max={1} />
             </div>
 
             <label style={{ display: 'flex', gap: 10, alignItems: 'center', cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={featured}
-                onChange={e => setFeatured(e.target.checked)}
-              />
+              <input type="checkbox" checked={featured} onChange={e => setFeatured(e.target.checked)} />
               <div>
-                <div style={{ fontWeight: 500, fontSize: 13 }}>Show on homepage carousel</div>
-                <div style={{ fontSize: 12, color: '#64748B' }}>Up to {MAX_FEATURED} categories total. Picture is recommended.</div>
+                <div style={{ fontWeight: 500, fontSize: 13 }}>Homepage carousel (max {MAX_FEATURED})</div>
+                <div style={{ fontSize: 12, color: '#64748B' }}>Rotating wheel on the main page.</div>
+              </div>
+            </label>
+
+            <label style={{ display: 'flex', gap: 10, alignItems: 'center', cursor: 'pointer' }}>
+              <input type="checkbox" checked={shopDisplay} onChange={e => setShopDisplay(e.target.checked)} />
+              <div>
+                <div style={{ fontWeight: 500, fontSize: 13 }}>Shop showcase (max {MAX_SHOP_DISPLAY})</div>
+                <div style={{ fontSize: 12, color: '#64748B' }}>
+                  Horizontal product sliders after customers load all shop products.
+                </div>
               </div>
             </label>
 

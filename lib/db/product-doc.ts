@@ -85,6 +85,10 @@ export interface CategoryDoc {
   image?: string | null
   /** When true, shown on the public homepage rotating wheel (cap at 6). */
   featured?: boolean
+  /** When true, shown in shop “category rails” after all products load (cap at 10). */
+  shopDisplay?: boolean
+  /** Lower numbers appear first in shop rails. */
+  shopDisplayOrder?: number
   createdAt?: Date
   updatedAt?: Date
 }

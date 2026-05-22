@@ -5,6 +5,7 @@ import type { CatalogProduct } from '@/lib/catalog/types'
 import { formatCad } from '@/lib/currency'
 import { useCart } from '@/lib/store'
 import ProductModal from './ProductModal'
+import CategoryProductRails, { type ShopDisplayCategory } from './CategoryProductRails'
 import { useToast } from './Toast'
 
 function badgeClass(badge: string | null): string {
@@ -241,7 +242,26 @@ export default function Shop() {
   }
   const [brandSheet, setBrandSheet] = useState(false)
   const [emptyHint, setEmptyHint] = useState<string | null>(null)
+  const [displayCategories, setDisplayCategories] = useState<ShopDisplayCategory[]>([])
   const { dispatch } = useCart()
+
+  const allProductsVisible = products.length > 0 && vis >= products.length
+
+  useEffect(() => {
+    if (!allProductsVisible) return
+    const ac = new AbortController()
+    ;(async () => {
+      try {
+        const r = await fetch('/api/categories/shop-display', { cache: 'no-store', signal: ac.signal })
+        if (!r.ok) return
+        const j = (await r.json()) as { categories?: ShopDisplayCategory[] }
+        if (!ac.signal.aborted) setDisplayCategories(j.categories || [])
+      } catch {
+        /* ignore */
+      }
+    })()
+    return () => ac.abort()
+  }, [allProductsVisible])
 
   useEffect(() => {
     const onFilter = (e: Event) => {
@@ -397,6 +417,10 @@ export default function Shop() {
                 Load more →
               </button>
             </div>
+          )}
+
+          {allProductsVisible && (
+            <CategoryProductRails categories={displayCategories} onOpenProduct={openProduct} />
           )}
         </div>
       </div>

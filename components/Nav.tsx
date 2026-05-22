@@ -1,4 +1,5 @@
 'use client'
+import Image from 'next/image'
 import { useState, useEffect } from 'react'
 import { useCart } from '@/lib/store'
 
@@ -35,9 +36,15 @@ export default function Nav() {
         transition:'padding .45s var(--ease),background .45s,border-color .45s',
         gap:12,
       }}>
-        <a href="#" className="nav-brand" style={{fontFamily:'var(--serif)',fontSize:18,fontWeight:500,letterSpacing:'.04em',display:'flex',alignItems:'center',gap:8,flexShrink:0,minWidth:0}}>
-          <span style={{fontSize:20}}>💨</span>
-          Vape<span style={{color:'var(--gold)'}}>Lounge</span>
+        <a href="#" className="nav-brand" style={{ display:'flex', alignItems:'center', flexShrink:0, minWidth:0 }}>
+          <Image
+            src="/logo.png"
+            alt="Vape Lounge"
+            width={160}
+            height={56}
+            priority
+            style={{ width:'clamp(108px, 32vw, 168px)', height:'auto', objectFit:'contain' }}
+          />
         </a>
 
         <div style={{display:'flex',gap:34,alignItems:'center'}} className="nav-mid-desktop">
@@ -84,12 +91,10 @@ export default function Nav() {
 
       <style>{`
         @media(max-width:768px){
-          .site-nav{ padding:14px 18px!important; gap:10px!important; }
+          .site-nav{ padding:12px 16px!important; gap:8px!important; }
           .nav-mid-desktop{ display:none!important; }
           #ham-btn{ display:flex!important; }
           .nav-cart-btn{ display:none!important; }
-          .nav-brand{ font-size:16px!important; }
-          .nav-brand>span:first-child{ font-size:18px!important; }
         }
         @media(min-width:769px){ #ham-btn{ display:none!important; } }
       `}</style>

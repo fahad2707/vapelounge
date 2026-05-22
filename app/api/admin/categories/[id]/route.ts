@@ -5,8 +5,7 @@ import { getAdminDb } from '@/lib/admin/db'
 import { requireAdmin } from '@/lib/admin/guard'
 import { slugify } from '@/lib/admin/slug'
 import type { CategoryDoc, ModelDoc, ProductDoc } from '@/lib/db/product-doc'
-
-const MAX_FEATURED = 6
+import { MAX_FEATURED, MAX_SHOP_DISPLAY } from '@/lib/server/categories'
 
 function oid(id: string): ObjectId | null {
   try { return new ObjectId(id) } catch { return null }
@@ -29,6 +28,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
         name: cat.name,
         image: cat.image || null,
         featured: !!cat.featured,
+        shopDisplay: !!cat.shopDisplay,
+        shopDisplayOrder: cat.shopDisplayOrder ?? 999,
       },
     })
   } catch (err) {
@@ -42,7 +43,13 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   const { id } = await ctx.params
   const _id = oid(id)
   if (!_id) return NextResponse.json({ error: 'Invalid id' }, { status: 400 })
-  let body: { name?: string; image?: string | null; featured?: boolean } = {}
+  let body: {
+    name?: string
+    image?: string | null
+    featured?: boolean
+    shopDisplay?: boolean
+    shopDisplayOrder?: number
+  } = {}
   try { body = (await req.json()) as typeof body } catch { return NextResponse.json({ error: 'Invalid body' }, { status: 400 }) }
 
   const update: Record<string, unknown> = { updatedAt: new Date() }
@@ -54,6 +61,10 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   }
   if ('image' in body) update.image = body.image && typeof body.image === 'string' ? body.image.trim() : null
   if ('featured' in body) update.featured = !!body.featured
+  if ('shopDisplay' in body) update.shopDisplay = !!body.shopDisplay
+  if (typeof body.shopDisplayOrder === 'number' && Number.isFinite(body.shopDisplayOrder)) {
+    update.shopDisplayOrder = body.shopDisplayOrder
+  }
 
   try {
     const db = await getAdminDb()
@@ -67,6 +78,21 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
           { status: 409 },
         )
       }
+    }
+    if (update.shopDisplay === true) {
+      const count = await col.countDocuments({ shopDisplay: true, _id: { $ne: _id } })
+      if (count >= MAX_SHOP_DISPLAY) {
+        return NextResponse.json(
+          { error: `You can showcase up to ${MAX_SHOP_DISPLAY} categories in the shop. Remove one first.` },
+          { status: 409 },
+        )
+      }
+      if (!('shopDisplayOrder' in update)) {
+        update.shopDisplayOrder = count + 1
+      }
+    }
+    if (update.shopDisplay === false) {
+      update.shopDisplayOrder = 999
     }
 
     await col.updateOne({ _id }, { $set: update })
@@ -102,7 +128,7 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
     const productCount = await db.collection<ProductDoc>(COL.products).countDocuments({ categoryId: id })
     if (productCount > 0) {
       return NextResponse.json(
-        { error: `Cannot delete: ${productCount} product(s) are still assigned to this category.` },
+        { error: `Cannot delete: ${productCount} product(s) are still assigned to this category. Unassign or hide products first.` },
         { status: 409 },
       )
     }
