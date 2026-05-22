@@ -26,24 +26,26 @@ export default function Nav() {
 
   return (
     <>
-      <nav className="site-nav" style={{
-        position:'fixed',top:0,left:0,right:0,zIndex:700,
-        display:'flex',alignItems:'center',justifyContent:'space-between',
-        padding: stuck ? '14px 56px' : '26px 56px',
-        background: stuck ? 'rgba(10,10,13,.88)' : 'transparent',
-        backdropFilter: stuck ? 'blur(24px) saturate(1.4)' : 'none',
-        borderBottom: stuck ? '1px solid var(--line)' : 'none',
-        transition:'padding .45s var(--ease),background .45s,border-color .45s',
-        gap:12,
-      }}>
-        <a href="#" className="nav-brand" style={{ display:'flex', alignItems:'center', flexShrink:0, minWidth:0 }}>
+      <nav
+        className={`site-nav${stuck ? ' site-nav--stuck' : ''}`}
+        style={{
+          position:'fixed',top:0,left:0,right:0,zIndex:700,
+          display:'flex',alignItems:'center',justifyContent:'space-between',
+          background: stuck ? 'rgba(10,10,13,.88)' : 'transparent',
+          backdropFilter: stuck ? 'blur(24px) saturate(1.4)' : 'none',
+          borderBottom: stuck ? '1px solid var(--line)' : 'none',
+          transition:'background .45s,border-color .45s',
+          gap:12,
+        }}
+      >
+        <a href="#" className="nav-brand">
           <Image
             src="/logo.png"
             alt="Vape Lounge"
-            width={160}
-            height={56}
+            width={814}
+            height={306}
             priority
-            style={{ width:'clamp(108px, 32vw, 168px)', height:'auto', objectFit:'contain' }}
+            className="nav-logo-img"
           />
         </a>
 
@@ -90,8 +92,40 @@ export default function Nav() {
       </div>
 
       <style>{`
+        .site-nav {
+          padding: 12px 56px;
+          min-height: 52px;
+          box-sizing: border-box;
+        }
+        .site-nav--stuck {
+          padding: 8px 56px;
+          min-height: 48px;
+        }
+        .nav-brand {
+          display: flex;
+          align-items: center;
+          flex-shrink: 0;
+          min-width: 0;
+          line-height: 0;
+        }
+        .nav-logo-img {
+          display: block;
+          width: auto;
+          height: 34px;
+          max-width: min(200px, 52vw);
+          object-fit: contain;
+          object-position: left center;
+        }
         @media(max-width:768px){
-          .site-nav{ padding:12px 16px!important; gap:8px!important; }
+          .site-nav, .site-nav--stuck {
+            padding: 8px 14px !important;
+            min-height: 44px !important;
+            gap: 8px !important;
+          }
+          .nav-logo-img {
+            height: 28px;
+            max-width: min(168px, 58vw);
+          }
           .nav-mid-desktop{ display:none!important; }
           #ham-btn{ display:flex!important; }
           .nav-cart-btn{ display:none!important; }
