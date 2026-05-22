@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server'
-import { getMongoClientPromise, getDbName } from '@/lib/mongodb'
+import { getDb } from '@/lib/db/get-db'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
-  const promise = getMongoClientPromise()
-  if (!promise) {
+  const db = await getDb()
+  if (!db) {
     return NextResponse.json(
       { ok: true, database: 'not_configured', hint: 'Set MONGODB_URI to enable MongoDB.' },
       { status: 200 },
@@ -13,8 +13,7 @@ export async function GET() {
   }
 
   try {
-    const client = await promise
-    await client.db(getDbName()).command({ ping: 1 })
+    await db.command({ ping: 1 })
     return NextResponse.json({ ok: true, database: 'up' }, { status: 200 })
   } catch {
     return NextResponse.json({ ok: false, database: 'down' }, { status: 503 })

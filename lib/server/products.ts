@@ -1,4 +1,4 @@
-import { getMongoClientPromise, getDbName } from '@/lib/mongodb'
+import { getDb } from '@/lib/db/get-db'
 import { COL } from '@/lib/db/collections'
 import { docToCatalogProduct, docToCatalogProductSummary, type ProductDoc } from '@/lib/db/product-doc'
 
@@ -40,42 +40,38 @@ const ADD_SHOP_BRAND = {
   },
 } as const
 
-const PROJECT_DROP_SHOP_BRAND = { $project: { shopBrand: 0 } } as const
-
-/** Strip heavy Wix fields before serializing the shop list (609 full docs ≈ 30MB+ JSON). */
-const PROJECT_LIST_SUMMARY = {
+/** Keep only card fields before sort/group so Mongo stays under the 32 MB sort cap. */
+const PROJECT_SLIM = {
   $project: {
-    shopBrand: 0,
-    descriptionHtml: 0,
-    descriptionPlain: 0,
-    variants: 0,
-    images: 0,
-    collectionRaw: 0,
-    costPrice: 0,
-    quantity: 0,
-    categoryId: 0,
-    modelId: 0,
-    variantGroupId: 0,
-    createdAt: 0,
-    updatedAt: 0,
+    handleId: 1,
+    name: 1,
+    image: 1,
+    primaryCategory: 1,
+    categories: 1,
+    price: 1,
+    compareAtPrice: 1,
+    badge: 1,
+    inStock: 1,
+    sku: 1,
+    brand: 1,
+    accentColor: 1,
   },
 } as const
 
-export async function listProducts(params: { brand?: string | null; limit: number; skip: number }) {
-  const promise = getMongoClientPromise()
-  if (!promise) return null
+const PROJECT_DROP_SHOP_BRAND = { $project: { shopBrand: 0 } } as const
 
-  const client = await promise
-  const col = client.db(getDbName()).collection<ProductDoc>(COL.products)
+const AGG_OPTS = { allowDiskUse: true } as const
+
+export async function listProducts(params: { brand?: string | null; limit: number; skip: number }) {
+  const db = await getDb()
+  if (!db) return null
+
+  const col = db.collection<ProductDoc>(COL.products)
 
   const b = params.brand?.trim()
-  const brandStages: object[] = [MATCH_VISIBLE, ADD_SHOP_BRAND]
+  const brandStages: object[] = [MATCH_VISIBLE, PROJECT_SLIM, ADD_SHOP_BRAND]
   if (b && b !== 'All brands') {
-    if (b === 'Other') {
-      brandStages.push({ $match: { shopBrand: 'Other' } })
-    } else {
-      brandStages.push({ $match: { shopBrand: b } })
-    }
+    brandStages.push({ $match: { shopBrand: b } })
   }
 
   const listPipeline = [
@@ -83,19 +79,23 @@ export async function listProducts(params: { brand?: string | null; limit: numbe
     { $sort: { name: 1 } as const },
     { $skip: params.skip },
     { $limit: params.limit },
-    PROJECT_LIST_SUMMARY,
+    PROJECT_DROP_SHOP_BRAND,
   ]
 
   const countPipeline = [...brandStages, { $count: 'n' }]
 
-  const brandsPipeline = [MATCH_VISIBLE, ADD_SHOP_BRAND, { $group: { _id: '$shopBrand' } }, { $sort: { _id: 1 } }]
-
-  const aggOpts = { allowDiskUse: true } as const
+  const brandsPipeline = [
+    MATCH_VISIBLE,
+    PROJECT_SLIM,
+    ADD_SHOP_BRAND,
+    { $group: { _id: '$shopBrand' } },
+    { $sort: { _id: 1 } },
+  ]
 
   const [docs, countRows, brandAgg] = await Promise.all([
-    col.aggregate<ProductDoc>(listPipeline, aggOpts).toArray(),
-    col.aggregate<{ n: number }>(countPipeline, aggOpts).toArray(),
-    col.aggregate<{ _id: string }>(brandsPipeline, aggOpts).toArray(),
+    col.aggregate<ProductDoc>(listPipeline, AGG_OPTS).toArray(),
+    col.aggregate<{ n: number }>(countPipeline, AGG_OPTS).toArray(),
+    col.aggregate<{ _id: string }>(brandsPipeline, AGG_OPTS).toArray(),
   ])
 
   const total = countRows[0]?.n ?? 0
@@ -115,20 +115,18 @@ export async function listProducts(params: { brand?: string | null; limit: numbe
 }
 
 export async function getProductByHandleId(handleId: string) {
-  const promise = getMongoClientPromise()
-  if (!promise) return null
-  const client = await promise
-  const col = client.db(getDbName()).collection<ProductDoc>(COL.products)
+  const db = await getDb()
+  if (!db) return null
+  const col = db.collection<ProductDoc>(COL.products)
   const doc = await col.findOne({ handleId, visible: true })
   return doc ? docToCatalogProduct(doc) : null
 }
 
 /** Returns siblings (other visible products in the same variant group). */
 export async function getSiblingsForHandleId(handleId: string) {
-  const promise = getMongoClientPromise()
-  if (!promise) return []
-  const client = await promise
-  const col = client.db(getDbName()).collection<ProductDoc>(COL.products)
+  const db = await getDb()
+  if (!db) return []
+  const col = db.collection<ProductDoc>(COL.products)
   const me = await col.findOne({ handleId, visible: true })
   if (!me?.variantGroupId) return []
   const siblings = await col
