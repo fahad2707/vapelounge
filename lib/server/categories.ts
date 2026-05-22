@@ -5,6 +5,11 @@ import { slugify } from '@/lib/admin/slug'
 import type { CategoryDoc, ProductDoc } from '@/lib/db/product-doc'
 import { docToCatalogProductSummary } from '@/lib/db/product-doc'
 import type { CatalogProduct } from '@/lib/catalog/types'
+import {
+  buildCategoryProductFilter,
+  escapeRegex,
+  PRODUCT_LIST_PROJECTION,
+} from '@/lib/server/brand-filter'
 
 export const MAX_FEATURED = 6
 export const MAX_SHOP_DISPLAY = 10
@@ -62,8 +67,8 @@ export async function distinctShopBrands(db: Db): Promise<string[]> {
 }
 
 /**
- * Ensure every catalog line from products exists in `categories` so admin can
- * manage featured / shop showcase without duplicates.
+ * Ensure every catalogue line from products exists in `categories` (admin sync).
+ * Call explicitly — not on every admin page load.
  */
 export async function syncCategoriesFromProducts(db: Db): Promise<number> {
   const labels = await distinctShopBrands(db)
@@ -94,19 +99,49 @@ export async function syncCategoriesFromProducts(db: Db): Promise<number> {
 }
 
 export function productFilterForCategory(catId: string, catName: string) {
-  return {
-    visible: true,
-    $or: [
-      { categoryId: catId },
-      { primaryCategory: catName },
-      { brand: catName },
-      { categories: catName },
-    ],
+  return buildCategoryProductFilter(catId, catName)
+}
+
+/** Batch product counts for admin category table (one DB round-trip). */
+export async function batchCategoryProductCounts(
+  db: Db,
+  categories: CategoryDoc[],
+): Promise<Record<string, number>> {
+  const rows = await db
+    .collection<ProductDoc>(COL.products)
+    .find({ visible: true }, { projection: { categoryId: 1, brand: 1, primaryCategory: 1, categories: 1 } })
+    .toArray()
+
+  const out: Record<string, number> = {}
+  for (const cat of categories) {
+    const id = (cat._id as ObjectId).toString()
+    const name = cat.name
+    const nameLower = name.toLowerCase()
+    let n = 0
+    for (const p of rows) {
+      if (p.categoryId === id) {
+        n++
+        continue
+      }
+      if ((p.brand || '').trim().toLowerCase() === nameLower) {
+        n++
+        continue
+      }
+      if ((p.primaryCategory || '').trim().toLowerCase() === nameLower) {
+        n++
+        continue
+      }
+      if (Array.isArray(p.categories) && p.categories.some(c => (c || '').trim().toLowerCase() === nameLower)) {
+        n++
+      }
+    }
+    out[id] = n
   }
+  return out
 }
 
 export async function countProductsForCategory(db: Db, catId: string, catName: string): Promise<number> {
-  return db.collection<ProductDoc>(COL.products).countDocuments(productFilterForCategory(catId, catName))
+  return db.collection<ProductDoc>(COL.products).countDocuments(buildCategoryProductFilter(catId, catName))
 }
 
 export interface ShopDisplayCategory {
@@ -125,39 +160,42 @@ export async function listShopDisplayCategories(db: Db): Promise<ShopDisplayCate
     .limit(MAX_SHOP_DISPLAY)
     .toArray()
 
-  const col = db.collection<ProductDoc>(COL.products)
+  if (!cats.length) return []
+
+  const orFilters = cats.flatMap(c => {
+    const re = new RegExp(`^${escapeRegex(c.name)}$`, 'i')
+    return [{ brand: re }, { primaryCategory: re }, { categories: c.name }]
+  })
+
+  const allDocs = await db
+    .collection<ProductDoc>(COL.products)
+    .find({ visible: true, $or: orFilters }, { projection: PRODUCT_LIST_PROJECTION })
+    .sort({ name: 1 })
+    .toArray()
+
   const out: ShopDisplayCategory[] = []
 
   for (const c of cats) {
     const id = (c._id as ObjectId).toString()
-    const docs = await col
-      .find(productFilterForCategory(id, c.name), {
-        projection: {
-          handleId: 1,
-          name: 1,
-          image: 1,
-          primaryCategory: 1,
-          categories: 1,
-          price: 1,
-          compareAtPrice: 1,
-          badge: 1,
-          inStock: 1,
-          sku: 1,
-          brand: 1,
-          accentColor: 1,
-        },
-      })
-      .sort({ name: 1 })
-      .limit(24)
-      .toArray()
-    if (docs.length === 0) continue
+    const nameLower = c.name.toLowerCase()
+    const matched = allDocs.filter(p => {
+      if (p.categoryId === id) return true
+      if ((p.brand || '').trim().toLowerCase() === nameLower) return true
+      if ((p.primaryCategory || '').trim().toLowerCase() === nameLower) return true
+      return Array.isArray(p.categories) && p.categories.some(x => (x || '').trim().toLowerCase() === nameLower)
+    })
+
+    const slice = matched.slice(0, 24).map(docToCatalogProductSummary)
+    if (slice.length === 0) continue
+
     out.push({
       id,
       slug: c.slug,
       name: c.name,
       image: c.image || null,
-      products: docs.map(docToCatalogProductSummary),
+      products: slice,
     })
   }
+
   return out
 }

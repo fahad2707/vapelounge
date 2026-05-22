@@ -32,11 +32,12 @@ export default function CategoriesClient() {
   const [submitting, setSubmitting] = useState(false)
   const [formErr, setFormErr] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (sync = false) => {
     setLoading(true)
     setErr(null)
     try {
-      const r = await fetch('/api/admin/categories', { cache: 'no-store' })
+      const url = sync ? '/api/admin/categories?sync=1' : '/api/admin/categories'
+      const r = await fetch(url, { cache: 'no-store' })
       const j = (await r.json().catch(() => ({}))) as {
         categories?: Category[]
         synced?: number
@@ -47,10 +48,14 @@ export default function CategoriesClient() {
         setItems([])
       } else {
         setItems(j.categories || [])
-        if (typeof j.synced === 'number' && j.synced > 0) {
+        if (sync && typeof j.synced === 'number' && j.synced > 0) {
           setSyncNote(`Synced ${j.synced} new line(s) from the product catalogue.`)
+        } else if (sync) {
+          setSyncNote('Catalogue sync complete — all product lines are in the list.')
         } else {
-          setSyncNote('All catalogue lines are listed below (synced from products + admin entries).')
+          setSyncNote(
+            `${j.categories?.length ?? 0} categories loaded. Click “Sync catalogue” to import any missing lines from products.`,
+          )
         }
       }
     } catch {
@@ -163,9 +168,14 @@ export default function CategoriesClient() {
             &quot;Load more&quot;).
           </div>
         </div>
-        <button type="button" className="adm-btn adm-btn-primary" onClick={openAdd}>
-          + Add category
-        </button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button type="button" className="adm-btn adm-btn-ghost" onClick={() => void load(true)} disabled={loading}>
+            Sync catalogue
+          </button>
+          <button type="button" className="adm-btn adm-btn-primary" onClick={openAdd}>
+            + Add category
+          </button>
+        </div>
       </div>
 
       {syncNote && !err && (

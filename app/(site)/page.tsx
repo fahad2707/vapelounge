@@ -8,6 +8,7 @@ import Ticker        from '@/components/Ticker'
 import About         from '@/components/About'
 import Carousel      from '@/components/Carousel'
 import Shop          from '@/components/Shop'
+import ShopShowcase  from '@/components/ShopShowcase'
 import Testimonials  from '@/components/Testimonials'
 import CTA           from '@/components/CTA'
 import Footer        from '@/components/Footer'
@@ -36,6 +37,7 @@ export default function Home() {
         <Carousel />
         <Divider />
         <Shop />
+        <ShopShowcase />
         <Divider />
         <About />
         <Divider />

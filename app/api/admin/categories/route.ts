@@ -8,7 +8,7 @@ import type { CategoryDoc } from '@/lib/db/product-doc'
 import {
   MAX_FEATURED,
   MAX_SHOP_DISPLAY,
-  countProductsForCategory,
+  batchCategoryProductCounts,
   syncCategoriesFromProducts,
 } from '@/lib/server/categories'
 
@@ -17,28 +17,33 @@ export async function GET(req: Request) {
   if (block) return block
   try {
     const db = await getAdminDb()
-    const synced = await syncCategoriesFromProducts(db)
+    const { searchParams } = new URL(req.url)
+    let synced = 0
+    if (searchParams.get('sync') === '1') {
+      synced = await syncCategoriesFromProducts(db)
+    }
+
     const docs = await db
       .collection<CategoryDoc>(COL.categories)
       .find({})
       .sort({ shopDisplay: -1, featured: -1, name: 1 })
       .toArray()
 
-    const categories = await Promise.all(
-      docs.map(async d => {
-        const id = (d._id as ObjectId).toString()
-        return {
-          id,
-          slug: d.slug,
-          name: d.name,
-          image: d.image || null,
-          featured: !!d.featured,
-          shopDisplay: !!d.shopDisplay,
-          shopDisplayOrder: d.shopDisplayOrder ?? 999,
-          productCount: await countProductsForCategory(db, id, d.name),
-        }
-      }),
-    )
+    const counts = await batchCategoryProductCounts(db, docs)
+
+    const categories = docs.map(d => {
+      const id = (d._id as ObjectId).toString()
+      return {
+        id,
+        slug: d.slug,
+        name: d.name,
+        image: d.image || null,
+        featured: !!d.featured,
+        shopDisplay: !!d.shopDisplay,
+        shopDisplayOrder: d.shopDisplayOrder ?? 999,
+        productCount: counts[id] ?? 0,
+      }
+    })
 
     return NextResponse.json({ categories, synced })
   } catch (err) {

@@ -32,6 +32,10 @@ async function createDbIndexes(db: Db): Promise<void> {
       { featured: -1, name: 1 },
       { name: 'admin_list_featured_name' },
     ),
+    db.collection(COL.categories).createIndex(
+      { shopDisplay: 1, shopDisplayOrder: 1, name: 1 },
+      { name: 'shop_display_order' },
+    ),
     db.collection(COL.models).createIndex(
       { name: 1 },
       { name: 'admin_list_name' },

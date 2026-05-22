@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { listProducts } from '@/lib/server/products'
 
 const CACHE_HEADER = {
-  'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
+  'Cache-Control': 'public, s-maxage=120, stale-while-revalidate=600',
 }
 
 function parseIntSafe(v: string | null, fallback: number, min: number, max: number) {
@@ -14,8 +14,9 @@ function parseIntSafe(v: string | null, fallback: number, min: number, max: numb
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const brand = searchParams.get('brand')
-  const limit = parseIntSafe(searchParams.get('limit'), 800, 1, 1000)
+  const limit = parseIntSafe(searchParams.get('limit'), 1000, 1, 2000)
   const skip = parseIntSafe(searchParams.get('skip'), 0, 0, 50_000)
+  const skipBrands = searchParams.get('skipBrands') === '1'
 
   const uri = process.env.MONGODB_URI?.trim()
   if (!uri) {
@@ -33,7 +34,12 @@ export async function GET(req: Request) {
   }
 
   try {
-    const fromDb = await listProducts({ brand, limit, skip })
+    const fromDb = await listProducts({
+      brand,
+      limit,
+      skip,
+      includeBrands: !skipBrands,
+    })
     if (!fromDb) {
       return NextResponse.json(
         {
@@ -47,6 +53,7 @@ export async function GET(req: Request) {
       )
     }
 
+    const brands = fromDb.brands ?? ['All brands']
     const noBrandFilter = !brand?.trim() || brand === 'All brands'
     if (!noBrandFilter && fromDb.total === 0) {
       return NextResponse.json(
@@ -54,7 +61,7 @@ export async function GET(req: Request) {
           source: 'mongodb' as const,
           products: [],
           total: 0,
-          brands: fromDb.brands,
+          brands,
           message: `No products in “${brand}”. Try another line or All brands.`,
         },
         { headers: CACHE_HEADER },
@@ -67,7 +74,7 @@ export async function GET(req: Request) {
           source: 'empty' as const,
           products: [],
           total: 0,
-          brands: fromDb.brands,
+          brands,
           message:
             'The database has no products yet. On your machine, set the same MONGODB_URI (and MONGODB_DB_NAME if you use it) as in Vercel, then run: npm run db:seed',
         },
@@ -80,7 +87,7 @@ export async function GET(req: Request) {
         source: 'mongodb' as const,
         products: fromDb.products,
         total: fromDb.total,
-        brands: fromDb.brands,
+        brands,
       },
       { headers: CACHE_HEADER },
     )

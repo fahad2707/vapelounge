@@ -1,11 +1,10 @@
 'use client'
 import Image from 'next/image'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { CatalogProduct } from '@/lib/catalog/types'
 import { formatCad } from '@/lib/currency'
 import { useCart } from '@/lib/store'
 import ProductModal from './ProductModal'
-import CategoryProductRails, { type ShopDisplayCategory } from './CategoryProductRails'
 import { useToast } from './Toast'
 
 function badgeClass(badge: string | null): string {
@@ -242,26 +241,8 @@ export default function Shop() {
   }
   const [brandSheet, setBrandSheet] = useState(false)
   const [emptyHint, setEmptyHint] = useState<string | null>(null)
-  const [displayCategories, setDisplayCategories] = useState<ShopDisplayCategory[]>([])
+  const brandsCached = useRef(false)
   const { dispatch } = useCart()
-
-  const allProductsVisible = products.length > 0 && vis >= products.length
-
-  useEffect(() => {
-    if (!allProductsVisible) return
-    const ac = new AbortController()
-    ;(async () => {
-      try {
-        const r = await fetch('/api/categories/shop-display', { cache: 'no-store', signal: ac.signal })
-        if (!r.ok) return
-        const j = (await r.json()) as { categories?: ShopDisplayCategory[] }
-        if (!ac.signal.aborted) setDisplayCategories(j.categories || [])
-      } catch {
-        /* ignore */
-      }
-    })()
-    return () => ac.abort()
-  }, [allProductsVisible])
 
   useEffect(() => {
     const onFilter = (e: Event) => {
@@ -282,9 +263,10 @@ export default function Shop() {
     ;(async () => {
       try {
         const q = new URLSearchParams()
-        q.set('limit', '1000')
+        q.set('limit', '2000')
         if (brandFilt && brandFilt !== 'All brands') q.set('brand', brandFilt)
-        const r = await fetch(`/api/products?${q.toString()}`, { cache: 'no-store', signal: ac.signal })
+        if (brandsCached.current) q.set('skipBrands', '1')
+        const r = await fetch(`/api/products?${q.toString()}`, { signal: ac.signal })
         let data: ProductsResponse = { products: [] }
         try {
           data = (await r.json()) as ProductsResponse
@@ -303,8 +285,17 @@ export default function Shop() {
           return
         }
 
-        if (Array.isArray(data.products)) setProducts(shuffle(data.products))
-        if (data.brands?.length) setBrands(data.brands)
+        if (Array.isArray(data.products)) {
+          setProducts(prev => {
+            const next = data.products
+            if (prev.length === 0) return shuffle(next)
+            return next
+          })
+        }
+        if (data.brands?.length) {
+          setBrands(data.brands)
+          brandsCached.current = true
+        }
 
         if (Array.isArray(data.products) && data.products.length === 0) {
           if (data.source === 'no_database') {
@@ -375,19 +366,21 @@ export default function Shop() {
 
       <div className="shop-layout">
         <aside className="shop-sidebar shop-sidebar-desktop" aria-label="Filter by brand">
-          <div className="shop-sidebar-title">Brand / line</div>
-          <nav style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {brands.map(b => (
-              <button
-                key={b}
-                type="button"
-                className={`shop-brand-btn${brandFilt === b ? ' on' : ''}`}
-                onClick={() => selectBrand(b)}
-              >
-                {b === 'All brands' ? 'All brands' : b}
-              </button>
-            ))}
-          </nav>
+          <div className="shop-sidebar-sticky">
+            <div className="shop-sidebar-title">Brand / line</div>
+            <nav className="shop-sidebar-nav">
+              {brands.map(b => (
+                <button
+                  key={b}
+                  type="button"
+                  className={`shop-brand-btn${brandFilt === b ? ' on' : ''}`}
+                  onClick={() => selectBrand(b)}
+                >
+                  {b === 'All brands' ? 'All brands' : b}
+                </button>
+              ))}
+            </nav>
+          </div>
         </aside>
 
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -419,9 +412,6 @@ export default function Shop() {
             </div>
           )}
 
-          {allProductsVisible && (
-            <CategoryProductRails categories={displayCategories} onOpenProduct={openProduct} />
-          )}
         </div>
       </div>
 
@@ -474,8 +464,16 @@ export default function Shop() {
       )}
 
       <style>{`
-        .shop-layout { display:flex; gap:40px; align-items:flex-start; max-width:1420px; margin:0 auto; }
-        .shop-sidebar { width:220px; flex-shrink:0; position:sticky; top:96px; max-height:calc(100vh - 120px); overflow-y:auto; padding-right:6px; }
+        .shop-layout { display:flex; gap:40px; align-items:stretch; max-width:1420px; margin:0 auto; }
+        .shop-sidebar { width:220px; flex-shrink:0; padding-right:6px; }
+        .shop-sidebar-sticky {
+          position:sticky;
+          top:64px;
+          max-height:calc(100vh - 72px);
+          overflow-y:auto;
+          padding-bottom:16px;
+        }
+        .shop-sidebar-nav { display:flex; flex-direction:column; gap:4px; }
         .shop-sidebar-title { font-size:9px; letter-spacing:.2em; text-transform:uppercase; color:var(--gold); margin-bottom:14px; font-weight:500; }
         .shop-brand-btn {
           display:block; width:100%; text-align:left; padding:10px 14px; font-size:12.5px; font-weight:300;

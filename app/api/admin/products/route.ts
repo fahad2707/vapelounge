@@ -5,6 +5,7 @@ import { getAdminDb } from '@/lib/admin/db'
 import { requireAdmin } from '@/lib/admin/guard'
 import { randSuffix, slugify } from '@/lib/admin/slug'
 import type { CategoryDoc, ProductDoc } from '@/lib/db/product-doc'
+import { ADMIN_PRODUCT_LIST_PROJECTION } from '@/lib/server/brand-filter'
 
 async function categoryNameFor(db: Awaited<ReturnType<typeof getAdminDb>>, id: string | null | undefined): Promise<string | null> {
   if (!id) return null
@@ -24,9 +25,8 @@ export async function GET() {
     // this sort index-driven so disk spill is never actually used in practice.
     const docs = await db
       .collection<ProductDoc>(COL.products)
-      .find({}, { projection: { collectionRaw: 0 } })
+      .find({}, { projection: ADMIN_PRODUCT_LIST_PROJECTION })
       .sort({ updatedAt: -1, name: 1 })
-      .allowDiskUse(true)
       .limit(2000)
       .toArray()
     return NextResponse.json({ products: docs })
