@@ -28,20 +28,24 @@ export async function listProducts(params: {
   const col = db.collection<ProductDoc>(COL.products)
   const filter = buildVisibleBrandFilter(params.brand)
 
-  const [docs, total, brands] = await Promise.all([
-    col
-      .find(filter, { projection: PRODUCT_LIST_PROJECTION })
-      .sort({ name: 1 })
-      .skip(params.skip)
-      .limit(params.limit)
-      .toArray(),
-    col.countDocuments(filter),
-    params.includeBrands !== false ? getCachedBrands() : Promise.resolve(null),
-  ])
+  const limit = params.limit
+  const docs = await col
+    .find(filter, { projection: PRODUCT_LIST_PROJECTION })
+    .sort({ name: 1 })
+    .skip(params.skip)
+    .limit(limit + 1)
+    .toArray()
+
+  const hasMore = docs.length > limit
+  const page = hasMore ? docs.slice(0, limit) : docs
+
+  const brands =
+    params.includeBrands !== false && params.skip === 0 ? await getCachedBrands() : null
 
   return {
-    products: docs.map(docToCatalogProductSummary),
-    total,
+    products: page.map(docToCatalogProductSummary),
+    total: hasMore ? params.skip + limit + 1 : params.skip + page.length,
+    hasMore,
     brands: brands ?? undefined,
   }
 }

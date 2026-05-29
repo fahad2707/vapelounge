@@ -1,14 +1,13 @@
 'use client'
 import Image from 'next/image'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { CatalogProduct } from '@/lib/catalog/types'
 import { formatCad } from '@/lib/currency'
 import { useCart } from '@/lib/store'
+import { productMatchesBrand } from '@/lib/catalog/shop-utils'
 import { catalogToWishlist, useWishlist } from '@/lib/wishlist'
 import ProductModal from './ProductModal'
 import { useToast } from './Toast'
-
-const PAGE_SIZE = 300
 
 function badgeClass(badge: string | null): string {
   if (!badge) return ''
@@ -231,7 +230,7 @@ type ProductsResponse = {
 }
 
 export default function Shop() {
-  const [products, setProducts] = useState<CatalogProduct[]>([])
+  const [catalog, setCatalog] = useState<CatalogProduct[]>([])
   const [brands, setBrands] = useState<string[]>(['All brands'])
   const [brandFilt, setBrandFilt] = useState('All brands')
   const [vis, setVis] = useState(36)
@@ -251,8 +250,12 @@ export default function Shop() {
   }
   const [brandSheet, setBrandSheet] = useState(false)
   const [emptyHint, setEmptyHint] = useState<string | null>(null)
-  const brandsCached = useRef(false)
   const { dispatch } = useCart()
+
+  const products = useMemo(
+    () => catalog.filter(p => productMatchesBrand(p, brandFilt)),
+    [catalog, brandFilt],
+  )
 
   useEffect(() => {
     const onFilter = (e: Event) => {
@@ -268,62 +271,39 @@ export default function Shop() {
 
   useEffect(() => {
     const ac = new AbortController()
-
-    async function fetchProductsPage(skip: number): Promise<ProductsResponse> {
-      const q = new URLSearchParams()
-      q.set('limit', String(PAGE_SIZE))
-      q.set('skip', String(skip))
-      q.set('skipBrands', '1')
-      if (brandFilt && brandFilt !== 'All brands') q.set('brand', brandFilt)
-      const r = await fetch(`/api/products?${q.toString()}`, { signal: ac.signal })
-      return (await r.json().catch(() => ({ products: [] }))) as ProductsResponse
-    }
-
     setLoaded(false)
     setEmptyHint(null)
-    setProducts([])
 
     ;(async () => {
       try {
-        if (!brandsCached.current) {
-          const br = await fetch('/api/products/brands', { signal: ac.signal })
-          if (br.ok) {
-            const bj = (await br.json()) as { brands?: string[] }
-            if (bj.brands?.length) {
-              setBrands(bj.brands)
-              brandsCached.current = true
-            }
-          }
-        }
-
-        const first = await fetchProductsPage(0)
+        const r = await fetch('/api/catalog', { signal: ac.signal })
+        const data = (await r.json().catch(() => ({ products: [] }))) as ProductsResponse
         if (ac.signal.aborted) return
 
-        if (!first.products?.length && first.source === 'error') {
-          setEmptyHint(first.message || 'Could not load catalog.')
+        if (!r.ok || data.source === 'error') {
+          setCatalog([])
+          setEmptyHint(data.message || 'Could not load catalog.')
           setLoaded(true)
           return
         }
 
-        let all = Array.isArray(first.products) ? shuffle(first.products) : []
-        const total = first.total ?? all.length
-        setProducts(all)
-        setLoaded(true)
-
-        if (all.length === 0) {
-          setEmptyHint(first.message || 'No products match this filter.')
+        if (data.source === 'no_database') {
+          setCatalog([])
+          setEmptyHint(data.message || 'Database not configured.')
+          setLoaded(true)
           return
         }
-        setEmptyHint(null)
 
-        let skip = all.length
-        while (skip < total && !ac.signal.aborted) {
-          const next = await fetchProductsPage(skip)
-          if (!next.products?.length) break
-          all = all.concat(next.products)
-          skip = all.length
-          setProducts(all)
+        const list = Array.isArray(data.products) ? shuffle(data.products) : []
+        setCatalog(list)
+        if (data.brands?.length) setBrands(data.brands)
+
+        if (list.length === 0) {
+          setEmptyHint(data.message || 'No products in catalog.')
+        } else {
+          setEmptyHint(null)
         }
+        setLoaded(true)
       } catch (e) {
         if (e instanceof Error && e.name === 'AbortError') return
         setEmptyHint('Network error while loading products. Try refreshing the page.')
@@ -332,7 +312,7 @@ export default function Shop() {
     })()
 
     return () => ac.abort()
-  }, [brandFilt])
+  }, [])
 
   const openBrands = () => setBrandSheet(true)
   const closeBrands = () => setBrandSheet(false)
@@ -342,6 +322,10 @@ export default function Shop() {
     setVis(36)
     setBrandSheet(false)
   }
+
+  useEffect(() => {
+    setVis(36)
+  }, [brandFilt])
 
   return (
     <section id="shop" className="shop-root" style={{ padding: '100px 56px 80px' }}>

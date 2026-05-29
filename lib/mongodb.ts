@@ -15,9 +15,12 @@ export function getMongoClientPromise(): Promise<MongoClient> | null {
   if (!globalForMongo.mongoClientPromise) {
     const client = new MongoClient(uri, {
       maxPoolSize: 10,
-      minPoolSize: 0,
-      maxIdleTimeMS: 60_000,
-      serverSelectionTimeoutMS: 10_000,
+      minPoolSize: 1,
+      maxIdleTimeMS: 120_000,
+      serverSelectionTimeoutMS: 5_000,
+      connectTimeoutMS: 8_000,
+      socketTimeoutMS: 45_000,
+      compressors: ['zlib'],
     })
     globalForMongo.mongoClientPromise = client.connect()
   }

@@ -6,6 +6,7 @@ import { requireAdmin } from '@/lib/admin/guard'
 import { randSuffix, slugify } from '@/lib/admin/slug'
 import type { CategoryDoc, ProductDoc } from '@/lib/db/product-doc'
 import { ADMIN_PRODUCT_LIST_PROJECTION } from '@/lib/server/brand-filter'
+import { revalidateCatalogCache } from '@/lib/server/revalidate-catalog'
 
 function parseIntSafe(v: string | null, fallback: number, min: number, max: number) {
   const n = Number.parseInt(v ?? '', 10)
@@ -25,7 +26,7 @@ export async function GET(req: Request) {
   const block = await requireAdmin()
   if (block) return block
   const { searchParams } = new URL(req.url)
-  const limit = parseIntSafe(searchParams.get('limit'), 120, 20, 500)
+  const limit = parseIntSafe(searchParams.get('limit'), 80, 20, 200)
   const skip = parseIntSafe(searchParams.get('skip'), 0, 0, 50_000)
   const q = searchParams.get('q')?.trim().toLowerCase() || ''
 
@@ -43,18 +44,18 @@ export async function GET(req: Request) {
         }
       : {}
 
-    const [docs, total] = await Promise.all([
-      col
-        .find(filter, { projection: ADMIN_PRODUCT_LIST_PROJECTION })
-        .sort({ updatedAt: -1, name: 1 })
-        .skip(skip)
-        .limit(limit)
-        .toArray(),
-      col.countDocuments(filter),
-    ])
+    const docs = await col
+      .find(filter, { projection: ADMIN_PRODUCT_LIST_PROJECTION })
+      .sort({ updatedAt: -1, name: 1 })
+      .skip(skip)
+      .limit(limit + 1)
+      .toArray()
+
+    const hasMore = docs.length > limit
+    const page = hasMore ? docs.slice(0, limit) : docs
 
     return NextResponse.json({
-      products: docs.map(d => ({
+      products: page.map(d => ({
         handleId: d.handleId,
         name: d.name,
         sku: d.sku ?? null,
@@ -69,7 +70,7 @@ export async function GET(req: Request) {
         categoryId: d.categoryId ?? null,
         modelId: d.modelId ?? null,
       })),
-      total,
+      hasMore,
       limit,
       skip,
     })
@@ -166,6 +167,7 @@ export async function POST(req: Request) {
 
   try {
     await db.collection<ProductDoc>(COL.products).insertOne(doc)
+    revalidateCatalogCache()
     return NextResponse.json({ ok: true, product: doc })
   } catch (err) {
     console.error('[admin/products POST]', err)

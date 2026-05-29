@@ -52,41 +52,49 @@ export default function ProductsClient() {
   const [submitErr, setSubmitErr] = useState<string | null>(null)
   const [savedToast, setSavedToast] = useState<string | null>(null)
 
-  const [total, setTotal] = useState(0)
+  const [hasMore, setHasMore] = useState(false)
+  const [skip, setSkip] = useState(0)
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setLoadErr(null)
-    try {
-      const params = new URLSearchParams()
-      params.set('limit', '200')
-      params.set('skip', '0')
-      if (q.trim()) params.set('q', q.trim())
-      const r = await fetch(`/api/admin/products?${params}`, { cache: 'no-store' })
-      const j = (await r.json().catch(() => ({}))) as {
-        products?: AdminProduct[]
-        total?: number
-        error?: string
+  const load = useCallback(
+    async (opts?: { append?: boolean; nextSkip?: number }) => {
+      setLoading(true)
+      setLoadErr(null)
+      const useSkip = opts?.append ? (opts.nextSkip ?? skip) : 0
+      try {
+        const params = new URLSearchParams()
+        params.set('limit', '80')
+        params.set('skip', String(useSkip))
+        if (q.trim()) params.set('q', q.trim())
+        const r = await fetch(`/api/admin/products?${params}`, { cache: 'no-store' })
+        const j = (await r.json().catch(() => ({}))) as {
+          products?: AdminProduct[]
+          hasMore?: boolean
+          error?: string
+        }
+        if (!r.ok) {
+          setLoadErr(j.error || 'Failed to load products.')
+          if (!opts?.append) setProducts([])
+          setHasMore(false)
+        } else {
+          const batch = j.products || []
+          setProducts(prev => (opts?.append ? [...prev, ...batch] : batch))
+          setHasMore(!!j.hasMore)
+          setSkip(useSkip + batch.length)
+        }
+      } catch {
+        setLoadErr('Network error while loading products.')
+      } finally {
+        setLoading(false)
       }
-      if (!r.ok) {
-        setLoadErr(j.error || 'Failed to load products.')
-        setProducts([])
-        setTotal(0)
-      } else {
-        setProducts(j.products || [])
-        setTotal(j.total ?? j.products?.length ?? 0)
-      }
-    } catch {
-      setLoadErr('Network error while loading products.')
-    } finally {
-      setLoading(false)
-    }
-  }, [q])
+    },
+    [q, skip],
+  )
 
   useEffect(() => {
-    const t = window.setTimeout(() => void load(), q.trim() ? 280 : 0)
+    setSkip(0)
+    const t = window.setTimeout(() => void load({ append: false, nextSkip: 0 }), q.trim() ? 280 : 0)
     return () => window.clearTimeout(t)
-  }, [load, q])
+  }, [q])
 
   const filtered = useMemo(() => {
     return products.filter(p => showHidden || p.visible)
@@ -221,6 +229,18 @@ export default function ProductsClient() {
           {products.length === 0
             ? 'No products yet. Click “Add product” to create your first one.'
             : 'No products match this search.'}
+        </div>
+      )}
+
+      {hasMore && !loading && (
+        <div style={{ textAlign: 'center', marginBottom: 16 }}>
+          <button
+            type="button"
+            className="adm-btn adm-btn-ghost"
+            onClick={() => void load({ append: true })}
+          >
+            Load more products →
+          </button>
         </div>
       )}
 

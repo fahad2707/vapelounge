@@ -4,6 +4,7 @@ import { COL } from '@/lib/db/collections'
 import { getAdminDb } from '@/lib/admin/db'
 import { requireAdmin } from '@/lib/admin/guard'
 import type { CategoryDoc, ProductDoc } from '@/lib/db/product-doc'
+import { revalidateCatalogCache } from '@/lib/server/revalidate-catalog'
 
 async function categoryNameFor(db: Awaited<ReturnType<typeof getAdminDb>>, id: string | null | undefined): Promise<string | null> {
   if (!id) return null
@@ -99,6 +100,7 @@ export async function PATCH(
       .collection<ProductDoc>(COL.products)
       .findOneAndUpdate({ handleId }, { $set: update }, { returnDocument: 'after' })
     if (!r) return NextResponse.json({ error: 'Product not found' }, { status: 404 })
+    revalidateCatalogCache()
     return NextResponse.json({ ok: true, product: r })
   } catch (err) {
     console.error('[admin/products PATCH]', err)
@@ -120,6 +122,7 @@ export async function DELETE(
     const db = await getAdminDb()
     const r = await db.collection<ProductDoc>(COL.products).deleteOne({ handleId })
     if (r.deletedCount === 0) return NextResponse.json({ error: 'Product not found' }, { status: 404 })
+    revalidateCatalogCache()
     return NextResponse.json({ ok: true })
   } catch (err) {
     console.error('[admin/products DELETE]', err)
