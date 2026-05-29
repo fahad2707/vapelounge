@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server'
 import { getCachedCatalog } from '@/lib/server/catalog-cache'
 
-/** Full shop catalog — cached on the server (one DB read per ~2 min per region). */
-export const revalidate = 120
+export const dynamic = 'force-dynamic'
 
 const CACHE_HEADER = {
-  'Cache-Control': 'public, s-maxage=120, stale-while-revalidate=300',
+  'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120',
 }
 
 export async function GET() {
@@ -31,7 +30,7 @@ export async function GET() {
           products: [],
           brands: catalog.brands,
           total: 0,
-          message: 'Database is connected but has no visible products.',
+          message: 'No visible products in the database. Check MongoDB or run npm run db:seed.',
         },
         { headers: CACHE_HEADER },
       )
@@ -55,7 +54,7 @@ export async function GET() {
         products: [],
         brands: ['All brands'],
         total: 0,
-        message: 'Could not load catalog. Check MongoDB connection and Vercel logs.',
+        message: (err as Error).message || 'Could not load catalog.',
       },
       { status: 503, headers: CACHE_HEADER },
     )

@@ -5,14 +5,17 @@ export function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
+/** Match shop-visible products (field missing on old imports = visible). */
+export const SHOP_VISIBLE = { visible: { $ne: false } } as const
+
 /** Fast Mongo filter for visible products, optionally by sidebar brand/line. */
 export function buildVisibleBrandFilter(brand: string | null | undefined): Filter<ProductDoc> {
   const b = brand?.trim()
-  if (!b || b === 'All brands') return { visible: true }
+  if (!b || b === 'All brands') return { ...SHOP_VISIBLE }
 
   if (b === 'Other') {
     return {
-      visible: true,
+      ...SHOP_VISIBLE,
       $and: [
         {
           $or: [{ brand: null }, { brand: '' }, { brand: { $exists: false } }],
@@ -31,7 +34,7 @@ export function buildVisibleBrandFilter(brand: string | null | undefined): Filte
 
   const re = new RegExp(`^${escapeRegex(b)}$`, 'i')
   return {
-    visible: true,
+    ...SHOP_VISIBLE,
     $or: [{ brand: re }, { primaryCategory: re }, { categories: b }],
   }
 }
@@ -40,7 +43,7 @@ export function buildVisibleBrandFilter(brand: string | null | undefined): Filte
 export function buildCategoryProductFilter(catId: string, catName: string): Filter<ProductDoc> {
   const re = new RegExp(`^${escapeRegex(catName.trim())}$`, 'i')
   return {
-    visible: true,
+    ...SHOP_VISIBLE,
     $or: [
       { categoryId: catId },
       { brand: re },

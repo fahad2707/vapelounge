@@ -275,35 +275,67 @@ export default function Shop() {
     setEmptyHint(null)
 
     ;(async () => {
-      try {
-        const r = await fetch('/api/catalog', { signal: ac.signal })
-        const data = (await r.json().catch(() => ({ products: [] }))) as ProductsResponse
+      const apply = (data: ProductsResponse, list: CatalogProduct[]) => {
         if (ac.signal.aborted) return
-
-        if (!r.ok || data.source === 'error') {
-          setCatalog([])
-          setEmptyHint(data.message || 'Could not load catalog.')
-          setLoaded(true)
-          return
-        }
-
-        if (data.source === 'no_database') {
-          setCatalog([])
-          setEmptyHint(data.message || 'Database not configured.')
-          setLoaded(true)
-          return
-        }
-
-        const list = Array.isArray(data.products) ? shuffle(data.products) : []
-        setCatalog(list)
+        setCatalog(shuffle(list))
         if (data.brands?.length) setBrands(data.brands)
+        setEmptyHint(list.length === 0 ? data.message || 'No products in catalog.' : null)
+        setLoaded(true)
+      }
+
+      try {
+        let data: ProductsResponse | null = null
+        let list: CatalogProduct[] = []
+
+        const catalogRes = await fetch('/api/catalog', { signal: ac.signal })
+        const catalogCt = catalogRes.headers.get('content-type') ?? ''
+        if (catalogRes.ok && catalogCt.includes('application/json')) {
+          data = (await catalogRes.json()) as ProductsResponse
+          if (data.source === 'no_database') {
+            setCatalog([])
+            setEmptyHint(data.message || 'Database not configured.')
+            setLoaded(true)
+            return
+          }
+          if (data.source !== 'error') {
+            list = Array.isArray(data.products) ? data.products : []
+          }
+        }
 
         if (list.length === 0) {
-          setEmptyHint(data.message || 'No products in catalog.')
-        } else {
-          setEmptyHint(null)
+          const [pr, br] = await Promise.all([
+            fetch('/api/products?limit=2000&skipBrands=1', { signal: ac.signal }),
+            fetch('/api/products/brands', { signal: ac.signal }),
+          ])
+          if (ac.signal.aborted) return
+
+          const productsJson = (await pr.json().catch(() => ({ products: [] }))) as ProductsResponse
+          const brandsJson = br.ok
+            ? ((await br.json().catch(() => ({}))) as { brands?: string[] })
+            : {}
+
+          if (!pr.ok || productsJson.source === 'error') {
+            setCatalog([])
+            setEmptyHint(
+              productsJson.message || data?.message || 'Could not load products. Try refreshing.',
+            )
+            setLoaded(true)
+            return
+          }
+
+          if (productsJson.source === 'no_database') {
+            setCatalog([])
+            setEmptyHint(productsJson.message || 'Database not configured.')
+            setLoaded(true)
+            return
+          }
+
+          data = productsJson
+          list = Array.isArray(productsJson.products) ? productsJson.products : []
+          if (brandsJson.brands?.length) data.brands = brandsJson.brands
         }
-        setLoaded(true)
+
+        apply(data ?? { products: list }, list)
       } catch (e) {
         if (e instanceof Error && e.name === 'AbortError') return
         setEmptyHint('Network error while loading products. Try refreshing the page.')

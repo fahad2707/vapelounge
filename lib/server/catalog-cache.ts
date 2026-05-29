@@ -1,4 +1,3 @@
-import { unstable_cache } from 'next/cache'
 import { getDb } from '@/lib/db/get-db'
 import { COL } from '@/lib/db/collections'
 import { docToCatalogProductSummary, type ProductDoc } from '@/lib/db/product-doc'
@@ -6,6 +5,10 @@ import { PRODUCT_LIST_PROJECTION } from '@/lib/server/brand-filter'
 import type { CatalogProduct } from '@/lib/catalog/types'
 
 export const CATALOG_CACHE_TAG = 'vapelounge-catalog'
+
+import { SHOP_VISIBLE as SHOP_VISIBLE_FILTER } from '@/lib/server/brand-filter'
+
+export { SHOP_VISIBLE_FILTER }
 
 export interface CachedCatalog {
   products: CatalogProduct[]
@@ -39,7 +42,7 @@ async function loadCatalogFromDb(): Promise<CachedCatalog> {
 
   const docs = await db
     .collection<ProductDoc>(COL.products)
-    .find({ visible: true }, { projection: PRODUCT_LIST_PROJECTION })
+    .find(SHOP_VISIBLE_FILTER, { projection: PRODUCT_LIST_PROJECTION })
     .sort({ name: 1 })
     .toArray()
 
@@ -52,8 +55,23 @@ async function loadCatalogFromDb(): Promise<CachedCatalog> {
   }
 }
 
-/** One Mongo query per ~2 min per region — all shop visitors share this. */
-export const getCachedCatalog = unstable_cache(loadCatalogFromDb, ['vapelounge-catalog-v3'], {
-  revalidate: 120,
-  tags: [CATALOG_CACHE_TAG],
-})
+/** In-memory TTL cache (never cache empty — avoids build-time poisoned unstable_cache). */
+const globalCache = globalThis as unknown as {
+  vlCatalog?: { data: CachedCatalog; at: number }
+}
+
+const TTL_MS = 120_000
+
+export async function getCachedCatalog(): Promise<CachedCatalog> {
+  const now = Date.now()
+  const hit = globalCache.vlCatalog
+  if (hit && hit.data.total > 0 && now - hit.at < TTL_MS) {
+    return hit.data
+  }
+
+  const data = await loadCatalogFromDb()
+  if (data.total > 0) {
+    globalCache.vlCatalog = { data, at: now }
+  }
+  return data
+}
