@@ -54,15 +54,24 @@ export function docToCatalogProduct(doc: ProductDoc): CatalogProduct {
   }
 }
 
+/** Strip embedded data-URIs — they bloat API responses and break CDN caching. */
+export function sanitizeCatalogImageUrl(url: string | null | undefined): string {
+  const u = url?.trim() ?? ''
+  if (!u || u.startsWith('data:')) return ''
+  if (u.startsWith('https://') || u.startsWith('http://')) return u
+  return ''
+}
+
 /** Lightweight shape for shop grid / list API (omits HTML, galleries, variants). */
 export function docToCatalogProductSummary(doc: ProductDoc): CatalogProduct {
+  const image = sanitizeCatalogImageUrl(doc.image)
   return {
     id: doc.handleId,
     name: doc.name,
     descriptionHtml: '',
     descriptionPlain: '',
-    images: doc.image ? [doc.image] : [],
-    image: doc.image,
+    images: image ? [image] : [],
+    image,
     primaryCategory: doc.primaryCategory,
     categories: doc.categories,
     price: doc.price,

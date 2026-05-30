@@ -2,6 +2,11 @@
 import Image from 'next/image'
 import { useEffect, useMemo, useState } from 'react'
 import type { CatalogProduct } from '@/lib/catalog/types'
+import {
+  mergeCatalogWithFeatured,
+  SHOP_FEATURED_BRANDS,
+  SHOP_FEATURED_PRODUCTS,
+} from '@/lib/catalog/shop-featured-static'
 import { formatCad } from '@/lib/currency'
 import { useCart } from '@/lib/store'
 import { productMatchesBrand } from '@/lib/catalog/shop-utils'
@@ -14,15 +19,6 @@ function badgeClass(badge: string | null): string {
   const b = badge.toLowerCase()
   if (b === 'hot' || b === 'sale' || b === 'new') return b
   return 'tag'
-}
-
-function shuffle<T>(arr: T[]): T[] {
-  const out = arr.slice()
-  for (let i = out.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[out[i], out[j]] = [out[j], out[i]]
-  }
-  return out
 }
 
 function ProductCard({
@@ -230,8 +226,9 @@ type ProductsResponse = {
   message?: string
 }
 
-const SHOP_FIRST_PAGE = 120
-const SHOP_PAGE_SIZE = 400
+const SHOP_PAGE_SIZE = 500
+
+const HAS_INSTANT_FEATURED = SHOP_FEATURED_PRODUCTS.length > 0
 
 async function fetchProductPage(
   skip: number,
@@ -244,11 +241,11 @@ async function fetchProductPage(
 }
 
 export default function Shop() {
-  const [catalog, setCatalog] = useState<CatalogProduct[]>([])
-  const [brands, setBrands] = useState<string[]>(['All brands'])
+  const [catalog, setCatalog] = useState<CatalogProduct[]>(SHOP_FEATURED_PRODUCTS)
+  const [brands, setBrands] = useState<string[]>(SHOP_FEATURED_BRANDS)
   const [brandFilt, setBrandFilt] = useState('All brands')
   const [vis, setVis] = useState(36)
-  const [loaded, setLoaded] = useState(false)
+  const [loaded, setLoaded] = useState(HAS_INSTANT_FEATURED)
   const [modalProduct, setModalProduct] = useState<CatalogProduct | null>(null)
 
   const openProduct = async (summary: CatalogProduct) => {
@@ -285,91 +282,66 @@ export default function Shop() {
 
   useEffect(() => {
     const ac = new AbortController()
-    setLoaded(false)
+    if (!HAS_INSTANT_FEATURED) {
+      setLoaded(false)
+    }
     setEmptyHint(null)
 
     ;(async () => {
-      const apply = (data: ProductsResponse, list: CatalogProduct[]) => {
-        if (ac.signal.aborted) return
-        setCatalog(shuffle(list))
-        if (data.brands?.length) setBrands(data.brands)
-        setEmptyHint(list.length === 0 ? data.message || 'No products in catalog.' : null)
-        setLoaded(true)
-      }
-
       try {
-        let data: ProductsResponse | null = null
-        let list: CatalogProduct[] = []
-
-        const catalogRes = await fetch('/api/catalog', { signal: ac.signal })
-        const catalogCt = catalogRes.headers.get('content-type') ?? ''
-        if (catalogRes.ok && catalogCt.includes('application/json')) {
-          data = (await catalogRes.json()) as ProductsResponse
-          if (data.source === 'no_database') {
-            setCatalog([])
-            setEmptyHint(data.message || 'Database not configured.')
-            setLoaded(true)
-            return
-          }
-          if (data.source !== 'error') {
-            list = Array.isArray(data.products) ? data.products : []
-          }
+        const brandsRes = await fetch('/api/products/brands', { signal: ac.signal })
+        if (!ac.signal.aborted && brandsRes.ok) {
+          const brandsJson = (await brandsRes.json().catch(() => ({}))) as { brands?: string[] }
+          if (brandsJson.brands?.length) setBrands(brandsJson.brands)
         }
 
-        if (list.length === 0) {
-          const [first, brandsRes] = await Promise.all([
-            fetchProductPage(0, SHOP_FIRST_PAGE, ac.signal),
-            fetch('/api/products/brands', { signal: ac.signal }),
-          ])
+        let skip = 0
+        let hasMore = true
+        const all: CatalogProduct[] = []
+
+        while (hasMore && !ac.signal.aborted) {
+          const page = await fetchProductPage(skip, SHOP_PAGE_SIZE, ac.signal)
           if (ac.signal.aborted) return
 
-          const brandsJson = brandsRes.ok
-            ? ((await brandsRes.json().catch(() => ({}))) as { brands?: string[] })
-            : {}
-
-          if (first.source === 'error' || (first.products.length === 0 && first.source !== 'mongodb')) {
-            setCatalog([])
-            setEmptyHint(
-              first.message || data?.message || 'Could not load products. Try refreshing.',
-            )
+          if (page.source === 'no_database') {
+            if (!HAS_INSTANT_FEATURED) {
+              setCatalog([])
+              setEmptyHint(page.message || 'Database not configured.')
+            }
             setLoaded(true)
             return
           }
 
-          if (first.source === 'no_database') {
-            setCatalog([])
-            setEmptyHint(first.message || 'Database not configured.')
+          if (page.source === 'error') {
+            if (!HAS_INSTANT_FEATURED) {
+              setCatalog([])
+              setEmptyHint(page.message || 'Could not load products.')
+            }
             setLoaded(true)
             return
           }
 
-          data = first
-          list = Array.isArray(first.products) ? first.products : []
-          if (brandsJson.brands?.length) data.brands = brandsJson.brands
+          if (page.products.length) all.push(...page.products)
+          hasMore = page.hasMore
+          skip += page.products.length
 
-          apply(data, list)
-
-          if (first.hasMore) {
-            let skip = list.length
-            ;(async () => {
-              let hasMore = true
-              while (hasMore && !ac.signal.aborted) {
-                const page = await fetchProductPage(skip, SHOP_PAGE_SIZE, ac.signal)
-                if (ac.signal.aborted) return
-                if (page.source === 'error' || !page.products.length) break
-                hasMore = page.hasMore
-                skip += page.products.length
-                setCatalog(prev => [...prev, ...page.products])
-              }
-            })().catch(() => {})
+          if (!ac.signal.aborted && all.length) {
+            setCatalog(mergeCatalogWithFeatured(SHOP_FEATURED_PRODUCTS, all))
+            setLoaded(true)
           }
-          return
         }
 
-        apply(data ?? { products: list }, list)
+        if (!ac.signal.aborted) {
+          if (!all.length && !HAS_INSTANT_FEATURED) {
+            setEmptyHint('No products in catalog.')
+          }
+          setLoaded(true)
+        }
       } catch (e) {
         if (e instanceof Error && e.name === 'AbortError') return
-        setEmptyHint('Network error while loading products. Try refreshing the page.')
+        if (!HAS_INSTANT_FEATURED) {
+          setEmptyHint('Network error while loading products. Try refreshing the page.')
+        }
         setLoaded(true)
       }
     })()
