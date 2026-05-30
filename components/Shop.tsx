@@ -226,7 +226,21 @@ type ProductsResponse = {
   products: CatalogProduct[]
   brands?: string[]
   total?: number
+  hasMore?: boolean
   message?: string
+}
+
+const SHOP_FIRST_PAGE = 120
+const SHOP_PAGE_SIZE = 400
+
+async function fetchProductPage(
+  skip: number,
+  limit: number,
+  signal: AbortSignal,
+): Promise<ProductsResponse & { hasMore: boolean }> {
+  const r = await fetch(`/api/products?limit=${limit}&skip=${skip}&skipBrands=1`, { signal })
+  const data = (await r.json().catch(() => ({ products: [] }))) as ProductsResponse
+  return { ...data, hasMore: Boolean(data.hasMore) }
 }
 
 export default function Shop() {
@@ -303,36 +317,53 @@ export default function Shop() {
         }
 
         if (list.length === 0) {
-          const [pr, br] = await Promise.all([
-            fetch('/api/products?limit=2000&skipBrands=1', { signal: ac.signal }),
+          const [first, brandsRes] = await Promise.all([
+            fetchProductPage(0, SHOP_FIRST_PAGE, ac.signal),
             fetch('/api/products/brands', { signal: ac.signal }),
           ])
           if (ac.signal.aborted) return
 
-          const productsJson = (await pr.json().catch(() => ({ products: [] }))) as ProductsResponse
-          const brandsJson = br.ok
-            ? ((await br.json().catch(() => ({}))) as { brands?: string[] })
+          const brandsJson = brandsRes.ok
+            ? ((await brandsRes.json().catch(() => ({}))) as { brands?: string[] })
             : {}
 
-          if (!pr.ok || productsJson.source === 'error') {
+          if (first.source === 'error' || (first.products.length === 0 && first.source !== 'mongodb')) {
             setCatalog([])
             setEmptyHint(
-              productsJson.message || data?.message || 'Could not load products. Try refreshing.',
+              first.message || data?.message || 'Could not load products. Try refreshing.',
             )
             setLoaded(true)
             return
           }
 
-          if (productsJson.source === 'no_database') {
+          if (first.source === 'no_database') {
             setCatalog([])
-            setEmptyHint(productsJson.message || 'Database not configured.')
+            setEmptyHint(first.message || 'Database not configured.')
             setLoaded(true)
             return
           }
 
-          data = productsJson
-          list = Array.isArray(productsJson.products) ? productsJson.products : []
+          data = first
+          list = Array.isArray(first.products) ? first.products : []
           if (brandsJson.brands?.length) data.brands = brandsJson.brands
+
+          apply(data, list)
+
+          if (first.hasMore) {
+            let skip = list.length
+            ;(async () => {
+              let hasMore = true
+              while (hasMore && !ac.signal.aborted) {
+                const page = await fetchProductPage(skip, SHOP_PAGE_SIZE, ac.signal)
+                if (ac.signal.aborted) return
+                if (page.source === 'error' || !page.products.length) break
+                hasMore = page.hasMore
+                skip += page.products.length
+                setCatalog(prev => [...prev, ...page.products])
+              }
+            })().catch(() => {})
+          }
+          return
         }
 
         apply(data ?? { products: list }, list)

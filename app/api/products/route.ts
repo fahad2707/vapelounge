@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server'
 import { listProducts } from '@/lib/server/products'
 
+export const dynamic = 'force-dynamic'
+export const maxDuration = 60
+
 const CACHE_HEADER = {
   'Cache-Control': 'public, s-maxage=120, stale-while-revalidate=600',
 }
@@ -87,6 +90,7 @@ export async function GET(req: Request) {
         source: 'mongodb' as const,
         products: fromDb.products,
         total: fromDb.total,
+        hasMore: fromDb.hasMore,
         brands,
       },
       { headers: CACHE_HEADER },

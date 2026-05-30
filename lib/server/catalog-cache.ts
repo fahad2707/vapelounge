@@ -44,6 +44,7 @@ async function loadCatalogFromDb(): Promise<CachedCatalog> {
     .collection<ProductDoc>(COL.products)
     .find(SHOP_VISIBLE_FILTER, { projection: PRODUCT_LIST_PROJECTION })
     .sort({ name: 1 })
+    .maxTimeMS(25_000)
     .toArray()
 
   const products = docs.map(docToCatalogProductSummary)

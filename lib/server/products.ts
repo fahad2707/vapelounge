@@ -1,20 +1,8 @@
-import { unstable_cache } from 'next/cache'
 import { getDb } from '@/lib/db/get-db'
 import { COL } from '@/lib/db/collections'
 import { docToCatalogProduct, docToCatalogProductSummary, type ProductDoc } from '@/lib/db/product-doc'
 import { buildVisibleBrandFilter, PRODUCT_LIST_PROJECTION } from '@/lib/server/brand-filter'
-import { distinctShopBrands } from '@/lib/server/categories'
-
-const getCachedBrands = unstable_cache(
-  async () => {
-    const db = await getDb()
-    if (!db) return ['All brands']
-    const labels = await distinctShopBrands(db)
-    return ['All brands', ...labels]
-  },
-  ['vapelounge-shop-brands'],
-  { revalidate: 300 },
-)
+import { getShopBrands } from '@/lib/server/shop-brands'
 
 export async function listProducts(params: {
   brand?: string | null
@@ -34,13 +22,14 @@ export async function listProducts(params: {
     .sort({ name: 1 })
     .skip(params.skip)
     .limit(limit + 1)
+    .maxTimeMS(25_000)
     .toArray()
 
   const hasMore = docs.length > limit
   const page = hasMore ? docs.slice(0, limit) : docs
 
   const brands =
-    params.includeBrands !== false && params.skip === 0 ? await getCachedBrands() : null
+    params.includeBrands !== false && params.skip === 0 ? await getShopBrands() : null
 
   return {
     products: page.map(docToCatalogProductSummary),
