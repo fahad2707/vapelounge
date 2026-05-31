@@ -7,9 +7,10 @@ import {
   SHOP_FEATURED_BRANDS,
   SHOP_FEATURED_PRODUCTS,
 } from '@/lib/catalog/shop-featured-static'
+import { productCardImage } from '@/lib/catalog/product-image'
 import { formatCad } from '@/lib/currency'
 import { useCart } from '@/lib/store'
-import { productMatchesBrand } from '@/lib/catalog/shop-utils'
+import { productMatchesBrand, productMatchesNav, type ShopNavFilter } from '@/lib/catalog/shop-utils'
 import { catalogToWishlist, useWishlist } from '@/lib/wishlist'
 import ProductModal from './ProductModal'
 import { useToast } from './Toast'
@@ -34,6 +35,7 @@ function ProductCard({
   const saved = isSaved(p.id)
   const bClass = badgeClass(p.badge)
   const accent = p.accentColor || 'var(--gold)'
+  const thumb = productCardImage(p)
 
   return (
     <div className="pc">
@@ -98,14 +100,15 @@ function ProductCard({
                 {p.badge}
               </span>
             )}
-            {p.image ? (
+            {thumb ? (
               <Image
-                src={p.image}
+                src={thumb}
                 alt={p.name}
                 fill
                 sizes="(max-width: 768px) 50vw, min(280px, 33vw)"
                 style={{ objectFit: 'cover' }}
                 unoptimized
+                loading="eager"
               />
             ) : (
               <div
@@ -244,6 +247,7 @@ export default function Shop() {
   const [catalog, setCatalog] = useState<CatalogProduct[]>(SHOP_FEATURED_PRODUCTS)
   const [brands, setBrands] = useState<string[]>(SHOP_FEATURED_BRANDS)
   const [brandFilt, setBrandFilt] = useState('All brands')
+  const [navFilt, setNavFilt] = useState<ShopNavFilter | null>(null)
   const [vis, setVis] = useState(36)
   const [loaded, setLoaded] = useState(HAS_INSTANT_FEATURED)
   const [modalProduct, setModalProduct] = useState<CatalogProduct | null>(null)
@@ -264,20 +268,34 @@ export default function Shop() {
   const { dispatch } = useCart()
 
   const products = useMemo(
-    () => catalog.filter(p => productMatchesBrand(p, brandFilt)),
-    [catalog, brandFilt],
+    () =>
+      catalog.filter(
+        p => productMatchesNav(p, navFilt) && (navFilt ? true : productMatchesBrand(p, brandFilt)),
+      ),
+    [catalog, brandFilt, navFilt],
   )
 
   useEffect(() => {
-    const onFilter = (e: Event) => {
+    const onBrand = (e: Event) => {
       const detail = (e as CustomEvent<string>).detail
       if (typeof detail === 'string' && detail.trim()) {
+        setNavFilt(null)
         setBrandFilt(detail.trim())
         setVis(36)
       }
     }
-    window.addEventListener('vp:filter-brand', onFilter as EventListener)
-    return () => window.removeEventListener('vp:filter-brand', onFilter as EventListener)
+    const onNav = (e: Event) => {
+      const detail = (e as CustomEvent<ShopNavFilter | null>).detail
+      setNavFilt(detail ?? null)
+      setBrandFilt('All brands')
+      setVis(36)
+    }
+    window.addEventListener('vp:filter-brand', onBrand as EventListener)
+    window.addEventListener('vp:filter-nav', onNav as EventListener)
+    return () => {
+      window.removeEventListener('vp:filter-brand', onBrand as EventListener)
+      window.removeEventListener('vp:filter-nav', onNav as EventListener)
+    }
   }, [])
 
   useEffect(() => {
@@ -353,9 +371,16 @@ export default function Shop() {
   const closeBrands = () => setBrandSheet(false)
 
   const selectBrand = (b: string) => {
+    setNavFilt(null)
     setBrandFilt(b)
     setVis(36)
     setBrandSheet(false)
+  }
+
+  const clearNavFilter = () => {
+    setNavFilt(null)
+    setVis(36)
+    window.history.replaceState(null, '', '#shop')
   }
 
   useEffect(() => {
@@ -408,6 +433,28 @@ export default function Shop() {
         </aside>
 
         <div style={{ flex: 1, minWidth: 0 }}>
+          {navFilt?.label && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+                marginBottom: 20,
+                padding: '12px 16px',
+                border: '1px solid var(--line2)',
+                background: 'var(--gold-a10)',
+              }}
+            >
+              <span style={{ fontSize: 13, color: 'var(--cream)' }}>
+                Showing: <strong>{navFilt.label}</strong>
+              </span>
+              <button type="button" className="btn-ghost" style={{ padding: '8px 14px' }} onClick={clearNavFilter}>
+                Clear filter
+              </button>
+            </div>
+          )}
+
           {loaded && products.length === 0 && emptyHint && (
             <p
               style={{

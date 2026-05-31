@@ -7,6 +7,11 @@ const nextConfig = {
         hostname: 'static.wixstatic.com',
         pathname: '/media/**',
       },
+      {
+        protocol: 'https',
+        hostname: 'res.cloudinary.com',
+        pathname: '/**',
+      },
     ],
   },
 }

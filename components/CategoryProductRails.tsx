@@ -2,6 +2,7 @@
 import Image from 'next/image'
 import { useCallback, useRef } from 'react'
 import type { CatalogProduct } from '@/lib/catalog/types'
+import { productCardImage } from '@/lib/catalog/product-image'
 import { formatCad } from '@/lib/currency'
 
 export interface ShopDisplayCategory {
@@ -13,11 +14,12 @@ export interface ShopDisplayCategory {
 }
 
 function RailCard({ p, onOpen }: { p: CatalogProduct; onOpen: () => void }) {
+  const thumb = productCardImage(p)
   return (
     <button type="button" className="cat-rail-card" onClick={onOpen}>
       <div className="cat-rail-img">
-        {p.image ? (
-          <Image src={p.image} alt={p.name} fill sizes="200px" style={{ objectFit: 'cover' }} unoptimized />
+        {thumb ? (
+          <Image src={thumb} alt={p.name} fill sizes="200px" style={{ objectFit: 'cover' }} unoptimized loading="eager" />
         ) : (
           <span style={{ fontSize: 36 }}>💨</span>
         )}
@@ -48,23 +50,31 @@ function ProductRail({
 
   return (
     <div className="cat-rail-block">
-      <div className="cat-rail-head">
-        <h3 className="cat-rail-title">{category.name}</h3>
-        <div className="cat-rail-arrows">
-          <button type="button" className="cat-rail-arrow" onClick={() => scroll(-1)} aria-label={`Scroll ${category.name} left`}>
-            ‹
-          </button>
-          <button type="button" className="cat-rail-arrow" onClick={() => scroll(1)} aria-label={`Scroll ${category.name} right`}>
-            ›
-          </button>
+      <h3 className="cat-rail-title">{category.name}</h3>
+      <div className="cat-rail-scroller">
+        <button
+          type="button"
+          className="cat-rail-arrow cat-rail-arrow--prev"
+          onClick={() => scroll(-1)}
+          aria-label={`Scroll ${category.name} left`}
+        >
+          ‹
+        </button>
+        <div className="cat-rail-track-wrap">
+          <div className="cat-rail-track" ref={trackRef}>
+            {category.products.map(p => (
+              <RailCard key={p.id} p={p} onOpen={() => onOpenProduct(p)} />
+            ))}
+          </div>
         </div>
-      </div>
-      <div className="cat-rail-track-wrap">
-        <div className="cat-rail-track" ref={trackRef}>
-          {category.products.map(p => (
-            <RailCard key={p.id} p={p} onOpen={() => onOpenProduct(p)} />
-          ))}
-        </div>
+        <button
+          type="button"
+          className="cat-rail-arrow cat-rail-arrow--next"
+          onClick={() => scroll(1)}
+          aria-label={`Scroll ${category.name} right`}
+        >
+          ›
+        </button>
       </div>
     </div>
   )
@@ -100,31 +110,33 @@ export default function CategoryProductRails({
         }
         .cat-rails-intro { margin-bottom: 32px; }
         .cat-rail-block { margin-bottom: 36px; }
-        .cat-rail-head {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 12px;
-          margin-bottom: 14px;
-        }
         .cat-rail-title {
           font-family: var(--serif);
           font-size: clamp(20px, 2.5vw, 28px);
           font-weight: 400;
           color: var(--cream);
+          margin: 0 0 14px;
         }
-        .cat-rail-arrows { display: flex; gap: 8px; flex-shrink: 0; }
+        .cat-rail-scroller {
+          display: flex;
+          align-items: center;
+          gap: clamp(8px, 1.5vw, 14px);
+        }
         .cat-rail-arrow {
+          flex-shrink: 0;
           width: 40px;
           height: 40px;
           border: 1px solid var(--line2);
           border-radius: 50%;
-          background: transparent;
+          background: var(--ink);
           color: var(--cream);
           font-size: 22px;
           line-height: 1;
           cursor: pointer;
           transition: border-color .25s, color .25s, background .25s;
+          display: grid;
+          place-items: center;
+          padding: 0;
         }
         .cat-rail-arrow:hover {
           border-color: var(--gold);
@@ -132,8 +144,9 @@ export default function CategoryProductRails({
           background: var(--gold-a10);
         }
         .cat-rail-track-wrap {
+          flex: 1;
+          min-width: 0;
           position: relative;
-          margin: 0 -4px;
         }
         .cat-rail-track {
           display: flex;
@@ -187,7 +200,8 @@ export default function CategoryProductRails({
         }
         @media (max-width: 768px) {
           .cat-rails-root { margin-top: 40px; padding-top: 32px; }
-          .cat-rail-arrow { width: 36px; height: 36px; font-size: 20px; }
+          .cat-rail-scroller { gap: 6px; }
+          .cat-rail-arrow { width: 34px; height: 34px; font-size: 18px; }
         }
       `}</style>
     </div>

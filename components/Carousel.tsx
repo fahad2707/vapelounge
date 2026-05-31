@@ -215,8 +215,8 @@ export default function Carousel() {
 
       <style>{`
         @media(max-width:768px){
-          #highlights{padding:70px 0 60px!important}
-          #highlights>div:first-child{padding:0 20px!important;flex-direction:column!important;align-items:flex-start!important}
+          #highlights{padding:18px 0 48px!important}
+          #highlights>div:first-child{padding:0 20px!important;flex-direction:column!important;align-items:flex-start!important;margin-bottom:0!important}
         }
       `}</style>
     </section>

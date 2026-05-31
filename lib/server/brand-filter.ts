@@ -57,6 +57,7 @@ export const PRODUCT_LIST_PROJECTION = {
   handleId: 1,
   name: 1,
   image: 1,
+  images: 1,
   primaryCategory: 1,
   categories: 1,
   price: 1,
@@ -66,6 +67,8 @@ export const PRODUCT_LIST_PROJECTION = {
   sku: 1,
   brand: 1,
   accentColor: 1,
+  categoryId: 1,
+  modelId: 1,
 } as const
 
 export const ADMIN_PRODUCT_LIST_PROJECTION = {

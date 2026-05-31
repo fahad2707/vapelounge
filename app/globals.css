@@ -243,11 +243,28 @@ body::before {
 
 @media (max-width: 768px) {
   .hero-section {
-    padding: 76px 0 64px;
+    min-height: auto;
+    justify-content: flex-start;
+    padding: 50px 0 10px;
+  }
+  .hero-section__inner {
+    gap: 10px;
+  }
+  .hero-carousel__controls {
+    margin-top: 8px;
+  }
+  .hero-section__ctas {
+    gap: 8px;
+  }
+  .hero-scroll-hint {
+    display: none;
   }
   .hero-carousel__frame {
     aspect-ratio: 5 / 2;
     border-radius: 16px;
+  }
+  .home-ticker {
+    padding: 8px 0 !important;
   }
 }
 

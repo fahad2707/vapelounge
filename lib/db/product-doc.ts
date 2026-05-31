@@ -34,13 +34,15 @@ export interface ProductDoc {
 }
 
 export function docToCatalogProduct(doc: ProductDoc): CatalogProduct {
+  const image = pickProductListImage(doc) || doc.image || ''
+  const images = doc.images?.length ? doc.images : image ? [image] : []
   return {
     id: doc.handleId,
     name: doc.name,
     descriptionHtml: doc.descriptionHtml,
     descriptionPlain: doc.descriptionPlain,
-    images: doc.images,
-    image: doc.image,
+    images,
+    image,
     primaryCategory: doc.primaryCategory,
     categories: doc.categories,
     price: doc.price,
@@ -59,12 +61,37 @@ export function sanitizeCatalogImageUrl(url: string | null | undefined): string 
   const u = url?.trim() ?? ''
   if (!u || u.startsWith('data:')) return ''
   if (u.startsWith('https://') || u.startsWith('http://')) return u
+  if (u.startsWith('//')) return `https:${u}`
+  return ''
+}
+
+/**
+ * Primary image for shop cards and list APIs.
+ * Prefers CDN/http URLs; falls back to data URLs when admin uploads lack Cloudinary.
+ */
+export function pickProductListImage(doc: Pick<ProductDoc, 'image' | 'images'>): string {
+  const candidates: string[] = []
+  const primary = doc.image?.trim()
+  if (primary) candidates.push(primary)
+  if (Array.isArray(doc.images)) {
+    for (const u of doc.images) {
+      const t = u?.trim()
+      if (t && !candidates.includes(t)) candidates.push(t)
+    }
+  }
+  for (const raw of candidates) {
+    const http = sanitizeCatalogImageUrl(raw)
+    if (http) return http
+  }
+  for (const raw of candidates) {
+    if (raw.startsWith('data:image/')) return raw
+  }
   return ''
 }
 
 /** Lightweight shape for shop grid / list API (omits HTML, galleries, variants). */
 export function docToCatalogProductSummary(doc: ProductDoc): CatalogProduct {
-  const image = sanitizeCatalogImageUrl(doc.image)
+  const image = pickProductListImage(doc)
   return {
     id: doc.handleId,
     name: doc.name,
@@ -82,6 +109,8 @@ export function docToCatalogProductSummary(doc: ProductDoc): CatalogProduct {
     sku: doc.sku,
     brand: doc.brand,
     accentColor: doc.accentColor,
+    categoryId: doc.categoryId ?? null,
+    modelId: doc.modelId ?? null,
   }
 }
 
@@ -98,6 +127,21 @@ export interface CategoryDoc {
   shopDisplay?: boolean
   /** Lower numbers appear first in shop rails. */
   shopDisplayOrder?: number
+  /** Parent header page (Disposable, E-liquids) for site navigation. */
+  headerPageId?: string | null
+  /** Order within the header page dropdown (lower = earlier). */
+  navOrder?: number
+  createdAt?: Date
+  updatedAt?: Date
+}
+
+/** Top-level site header tab (e.g. Disposable Vapes, E-liquids). */
+export interface HeaderPageDoc {
+  _id?: ObjectId
+  slug: string
+  name: string
+  showInNav?: boolean
+  navOrder?: number
   createdAt?: Date
   updatedAt?: Date
 }
