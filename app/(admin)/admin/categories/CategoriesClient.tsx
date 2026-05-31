@@ -12,6 +12,7 @@ interface Category {
   featured: boolean
   shopDisplay: boolean
   shopDisplayOrder: number
+  headerPageId: string | null
   productCount: number
 }
 
@@ -162,10 +163,10 @@ export default function CategoriesClient() {
         <div>
           <div className="adm-page-title">Categories</div>
           <div className="adm-page-sub">
-            All brand lines from your catalogue (auto-synced from products). Mark up to{' '}
-            <strong>{MAX_FEATURED}</strong> as <strong>Homepage carousel</strong> and up to{' '}
-            <strong>{MAX_SHOP_DISPLAY}</strong> as <strong>Shop showcase</strong> (horizontal rails after
-            &quot;Load more&quot;).
+            Brand lines (STLTH, Elfbar, Boosted). Assign them to a{' '}
+            <Link href="/admin/header-pages">header page</Link> (e.g. Disposable Vapes) for the site menu.
+            Add <strong>models</strong> under each category, then assign products. Carousel and shop showcase
+            flags are separate from the header.
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>

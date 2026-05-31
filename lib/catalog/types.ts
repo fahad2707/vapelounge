@@ -28,6 +28,8 @@ export interface CatalogProduct {
   sku: string | null
   brand: string | null
   accentColor: string
+  categoryId?: string | null
+  modelId?: string | null
 }
 
 /** Sibling product in the same variant group (e.g. other flavours of Elfbar 5k). */

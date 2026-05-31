@@ -5,6 +5,7 @@ import { getAdminDb } from '@/lib/admin/db'
 import { requireAdmin } from '@/lib/admin/guard'
 import { slugify } from '@/lib/admin/slug'
 import type { ModelDoc, CategoryDoc } from '@/lib/db/product-doc'
+import { revalidateCatalogCache } from '@/lib/server/revalidate-catalog'
 
 export async function GET() {
   const block = await requireAdmin()
@@ -55,6 +56,7 @@ export async function POST(req: Request) {
     const r = await db
       .collection<ModelDoc>(COL.models)
       .insertOne({ slug, name, categoryId, createdAt: now, updatedAt: now })
+    revalidateCatalogCache()
     return NextResponse.json({ ok: true, model: { id: r.insertedId.toString(), slug, name, categoryId } })
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 })

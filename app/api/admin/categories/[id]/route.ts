@@ -6,6 +6,7 @@ import { requireAdmin } from '@/lib/admin/guard'
 import { slugify } from '@/lib/admin/slug'
 import type { CategoryDoc, ModelDoc, ProductDoc } from '@/lib/db/product-doc'
 import { MAX_FEATURED, MAX_SHOP_DISPLAY } from '@/lib/server/categories'
+import { revalidateCatalogCache } from '@/lib/server/revalidate-catalog'
 
 function oid(id: string): ObjectId | null {
   try { return new ObjectId(id) } catch { return null }
@@ -30,6 +31,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
         featured: !!cat.featured,
         shopDisplay: !!cat.shopDisplay,
         shopDisplayOrder: cat.shopDisplayOrder ?? 999,
+        headerPageId: cat.headerPageId ?? null,
       },
     })
   } catch (err) {
@@ -49,6 +51,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     featured?: boolean
     shopDisplay?: boolean
     shopDisplayOrder?: number
+    headerPageId?: string | null
   } = {}
   try { body = (await req.json()) as typeof body } catch { return NextResponse.json({ error: 'Invalid body' }, { status: 400 }) }
 
@@ -64,6 +67,10 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   if ('shopDisplay' in body) update.shopDisplay = !!body.shopDisplay
   if (typeof body.shopDisplayOrder === 'number' && Number.isFinite(body.shopDisplayOrder)) {
     update.shopDisplayOrder = body.shopDisplayOrder
+  }
+  if ('headerPageId' in body) {
+    update.headerPageId =
+      typeof body.headerPageId === 'string' && body.headerPageId.trim() ? body.headerPageId.trim() : null
   }
 
   try {
@@ -104,6 +111,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       )
     }
 
+    revalidateCatalogCache()
     return NextResponse.json({ ok: true })
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 })
@@ -134,6 +142,7 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
     }
     const r = await db.collection<CategoryDoc>(COL.categories).deleteOne({ _id })
     if (r.deletedCount === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    revalidateCatalogCache()
     return NextResponse.json({ ok: true })
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 })

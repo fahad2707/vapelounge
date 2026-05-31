@@ -5,4 +5,5 @@ export const COL = {
   categories: 'categories',
   models: 'models',
   variantGroups: 'variantGroups',
+  headerPages: 'headerPages',
 } as const

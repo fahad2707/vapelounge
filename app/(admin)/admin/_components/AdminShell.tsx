@@ -5,6 +5,7 @@ import { useCallback } from 'react'
 
 const NAV_CATALOG = [
   { href: '/admin/products', label: 'Products' },
+  { href: '/admin/header-pages', label: 'Header pages' },
   { href: '/admin/categories', label: 'Categories' },
   { href: '/admin/models', label: 'Models' },
   { href: '/admin/variants', label: 'Variants' },
@@ -87,8 +88,9 @@ export default function AdminShell({
 
 function labelIcon(label: string): string {
   switch (label) {
-    case 'Products':   return '📦'
-    case 'Categories': return '🗂'
+    case 'Products':      return '📦'
+    case 'Header pages':  return '📋'
+    case 'Categories':    return '🗂'
     case 'Models':     return '🧩'
     case 'Variants':       return '🎨'
     case 'Online orders':  return '🧾'

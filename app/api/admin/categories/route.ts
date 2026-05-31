@@ -11,6 +11,7 @@ import {
   batchCategoryProductCounts,
   syncCategoriesFromProducts,
 } from '@/lib/server/categories'
+import { revalidateCatalogCache } from '@/lib/server/revalidate-catalog'
 
 export async function GET(req: Request) {
   const block = await requireAdmin()
@@ -41,6 +42,8 @@ export async function GET(req: Request) {
         featured: !!d.featured,
         shopDisplay: !!d.shopDisplay,
         shopDisplayOrder: d.shopDisplayOrder ?? 999,
+        headerPageId: d.headerPageId ?? null,
+        navOrder: d.navOrder ?? 999,
         productCount: counts[id] ?? 0,
       }
     })
@@ -55,7 +58,12 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const block = await requireAdmin()
   if (block) return block
-  let body: { name?: string; image?: string | null; featured?: boolean; shopDisplay?: boolean } = {}
+  let body: {
+    name?: string
+    image?: string | null
+    featured?: boolean
+    shopDisplay?: boolean
+  } = {}
   try {
     body = (await req.json()) as typeof body
   } catch {
@@ -103,9 +111,11 @@ export async function POST(req: Request) {
       featured,
       shopDisplay,
       shopDisplayOrder,
+      navOrder: 999,
       createdAt: now,
       updatedAt: now,
     })
+    revalidateCatalogCache()
     return NextResponse.json({
       ok: true,
       category: { id: r.insertedId.toString(), slug, name, image, featured, shopDisplay },

@@ -3,13 +3,7 @@ import Image from 'next/image'
 import { useState, useEffect } from 'react'
 import { useCart } from '@/lib/store'
 import { useWishlist } from '@/lib/wishlist'
-
-const LINKS = [
-  { href: '#about',      label: 'About'      },
-  { href: '#highlights', label: 'Products'   },
-  { href: '#shop',       label: 'Shop'       },
-  { href: '#testi',      label: 'Reviews'    },
-]
+import NavMenu from './NavMenu'
 
 export default function Nav() {
   const [stuck,   setStuck]   = useState(false)
@@ -52,17 +46,7 @@ export default function Nav() {
           />
         </a>
 
-        <div style={{display:'flex',gap:34,alignItems:'center'}} className="nav-mid-desktop">
-          {LINKS.map(l => (
-            <a key={l.href} href={l.href} className="nav-link" style={{
-              fontSize:11,letterSpacing:'.16em',textTransform:'uppercase',
-              color:'rgba(246,242,234,.55)',transition:'color .3s',position:'relative',
-            }}
-              onMouseEnter={e=>(e.currentTarget.style.color='var(--gold)')}
-              onMouseLeave={e=>(e.currentTarget.style.color='rgba(246,242,234,.55)')}
-            >{l.label}</a>
-          ))}
-        </div>
+        <NavMenu />
 
         <div style={{display:'flex',alignItems:'center',gap:12,flexShrink:0}}>
           <button
@@ -100,11 +84,7 @@ export default function Nav() {
 
       <div className={`nav-backdrop${mobOpen?' show':''}`} onClick={close}/>
       <div className={`mob-nav${mobOpen?' open':''}`}>
-        {LINKS.map(l => (
-          <a key={l.href} href={l.href} onClick={close} style={{fontSize:22,fontFamily:'var(--serif)',fontWeight:400,color:'var(--cream)',transition:'color .3s'}}
-            onMouseEnter={e=>(e.currentTarget.style.color='var(--gold)')}
-            onMouseLeave={e=>(e.currentTarget.style.color='var(--cream)')}>{l.label}</a>
-        ))}
+        <NavMenu onNavigate={close} />
         <button className="btn-fill" style={{marginTop:16,alignSelf:'flex-start'}} onClick={()=>{close();dispatch({type:'OPEN'})}}>
           <span>Cart</span>
         </button>
@@ -145,7 +125,7 @@ export default function Nav() {
             height: 28px;
             max-width: min(168px, 58vw);
           }
-          .nav-mid-desktop{ display:none!important; }
+          .nav-menu-desktop{ display:none!important; }
           #ham-btn{ display:flex!important; }
           .nav-cart-btn, .nav-wishlist-btn{ display:none!important; }
         }
