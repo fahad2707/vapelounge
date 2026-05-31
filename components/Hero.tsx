@@ -8,16 +8,16 @@ const SLIDE_COUNT = 3
 
 const SLIDES = [
   {
+    src: '/hero/flavour-drop.png',
+    alt: 'Flavour Drop — premium e-liquid, just arrived',
+  },
+  {
     src: '/hero/kraze-mega-x.png',
     alt: 'Kraze Mega X — new release, up to 48K puffs',
   },
   {
     src: '/hero/drip-n-daily.png',
     alt: "Drip'n Daily by ENVI — up to 100K puffs, designed in Canada",
-  },
-  {
-    src: '/hero/flavour-drop.png',
-    alt: 'Flavour Drop — premium e-liquid, just arrived',
   },
 ] as const
 
