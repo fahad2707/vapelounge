@@ -5,7 +5,41 @@ import type { NavMenuCategoryColumn, NavMenuHeaderPage } from '@/lib/server/nav-
 import { navFilterFromSlugs, shopNavHref } from '@/lib/catalog/nav-shop'
 import type { ShopNavFilter } from '@/lib/catalog/shop-utils'
 
-const STATIC_LINKS = [
+const navMenuMobileStyles = `
+  .nav-menu-mobile { display: block; width: 100%; }
+  .nav-mob-cat, .nav-mob-brand { border-bottom: 1px solid var(--line); }
+  .nav-mob-cat > summary, .nav-mob-brand > summary {
+    padding: 14px 0;
+    font-size: 18px;
+    font-family: var(--serif);
+    color: var(--cream);
+    cursor: pointer;
+    list-style: none;
+  }
+  .nav-mob-cat > summary::-webkit-details-marker,
+  .nav-mob-brand > summary::-webkit-details-marker { display: none; }
+  .nav-mob-inner {
+    padding: 0 0 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .nav-mob-inner a, .nav-mob-all, .nav-mob-static {
+    font-size: 14px;
+    color: rgba(246, 242, 234, 0.75);
+    text-decoration: none;
+  }
+  .nav-mob-inner a:hover, .nav-mob-all:hover, .nav-mob-static:hover { color: var(--gold); }
+  .nav-mob-brand > summary { font-size: 15px; padding: 10px 0; }
+  .nav-mob-static {
+    display: block;
+    padding: 14px 0;
+    font-size: 20px;
+    font-family: var(--serif);
+  }
+`
+
+const MOBILE_STATIC_LINKS = [
   { href: '#about', label: 'About' },
   { href: '#shop', label: 'Shop' },
   { href: '#testi', label: 'Reviews' },
@@ -55,7 +89,14 @@ function applyNav(
   goToShop(filter)
 }
 
-export default function NavMenu({ onNavigate }: { onNavigate?: () => void }) {
+export default function NavMenu({
+  onNavigate,
+  variant = 'desktop',
+}: {
+  onNavigate?: () => void
+  /** Desktop bar vs hamburger drawer — avoids duplicating mobile markup in the header. */
+  variant?: 'desktop' | 'mobile'
+}) {
   const [pages, setPages] = useState<NavMenuHeaderPage[]>([])
   const [openPage, setOpenPage] = useState<string | null>(null)
   const [openCat, setOpenCat] = useState<string | null>(null)
@@ -116,6 +157,102 @@ export default function NavMenu({ onNavigate }: { onNavigate?: () => void }) {
     onNavigate?.()
   }, [onNavigate])
 
+  const toggleCat = (catKey: string, hasFlyout: boolean) => {
+    if (!hasFlyout) return
+    setOpenCat(prev => (prev === catKey ? null : catKey))
+    setOpenBrand(null)
+  }
+
+  const toggleBrand = (brandKey: string) => {
+    setOpenBrand(prev => (prev === brandKey ? null : brandKey))
+  }
+
+  if (variant === 'mobile') {
+    return (
+      <>
+        <div className="nav-menu-mobile">
+          {pages.map(page => (
+            <details key={page.id} className="nav-mob-cat">
+              <summary>{page.name}</summary>
+              <div className="nav-mob-inner">
+                {page.categories.map(cat => (
+                  <details key={cat.id} className="nav-mob-brand">
+                    <summary>{cat.name}</summary>
+                    <div className="nav-mob-inner">
+                      {cat.entries.length === 0 ? (
+                        <a
+                          href={shopNavHref(page.slug, cat.slug)}
+                          onClick={e => {
+                            applyNav(e, pages, page, cat)
+                            close()
+                          }}
+                        >
+                          All {cat.name}
+                        </a>
+                      ) : (
+                        cat.entries.map(entry => {
+                          if (entry.type === 'item') {
+                            return (
+                              <a
+                                key={entry.id}
+                                href={shopNavHref(page.slug, cat.slug, entry.slug)}
+                                onClick={e => {
+                                  applyNav(e, pages, page, cat, entry.slug, entry.id, entry.name)
+                                  close()
+                                }}
+                              >
+                                {entry.name}
+                              </a>
+                            )
+                          }
+                          return (
+                            <details key={entry.name} className="nav-mob-brand">
+                              <summary>{entry.name}</summary>
+                              <div className="nav-mob-inner">
+                                {entry.models.map(m => (
+                                  <a
+                                    key={m.id}
+                                    href={shopNavHref(page.slug, cat.slug, m.slug)}
+                                    onClick={e => {
+                                      applyNav(e, pages, page, cat, m.slug, m.id, m.name)
+                                      close()
+                                    }}
+                                  >
+                                    {m.name}
+                                  </a>
+                                ))}
+                              </div>
+                            </details>
+                          )
+                        })
+                      )}
+                    </div>
+                  </details>
+                ))}
+                <a
+                  href={shopNavHref(page.slug)}
+                  className="nav-mob-all"
+                  onClick={e => {
+                    applyNav(e, pages, page)
+                    close()
+                  }}
+                >
+                  All {page.name}
+                </a>
+              </div>
+            </details>
+          ))}
+          {MOBILE_STATIC_LINKS.map(l => (
+            <a key={l.href} href={l.href} className="nav-mob-static" onClick={close}>
+              {l.label}
+            </a>
+          ))}
+        </div>
+        <style>{navMenuMobileStyles}</style>
+      </>
+    )
+  }
+
   return (
     <>
       <div ref={wrapRef} className="nav-menu-desktop">
@@ -161,17 +298,33 @@ export default function NavMenu({ onNavigate }: { onNavigate?: () => void }) {
                         }}
                         onMouseLeave={() => setOpenCat(prev => (prev === catKey ? null : prev))}
                       >
-                        <a
-                          href={shopNavHref(page.slug, cat.slug)}
-                          className="nav-mega-brand-label nav-mega-link"
-                          onClick={e => {
-                            applyNav(e, pages, page, cat)
-                            close()
-                          }}
-                        >
-                          {cat.name}
-                          {hasFlyout && <span className="nav-menu-chev nav-menu-chev--right">›</span>}
-                        </a>
+                        <div className="nav-mega-row">
+                          <a
+                            href={shopNavHref(page.slug, cat.slug)}
+                            className="nav-mega-brand-label nav-mega-link"
+                            onClick={e => {
+                              applyNav(e, pages, page, cat)
+                              close()
+                            }}
+                          >
+                            {cat.name}
+                          </a>
+                          {hasFlyout && (
+                            <button
+                              type="button"
+                              className="nav-mega-expand"
+                              aria-expanded={openCat === catKey}
+                              aria-label={`Show ${cat.name} models`}
+                              onClick={e => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                toggleCat(catKey, hasFlyout)
+                              }}
+                            >
+                              ›
+                            </button>
+                          )}
+                        </div>
 
                         {hasFlyout && openCat === catKey && (
                           <div className="nav-mega-flyout">
@@ -192,20 +345,30 @@ export default function NavMenu({ onNavigate }: { onNavigate?: () => void }) {
                                 )
                               }
                               const brandKey = `${catKey}:${entry.name}`
+                              const brandOpen = openBrand === brandKey
                               return (
                                 <div
                                   key={brandKey}
-                                  className="nav-mega-brand"
+                                  className={`nav-mega-brand${brandOpen ? ' is-open' : ''}`}
                                   onMouseEnter={() => setOpenBrand(brandKey)}
-                                  onMouseLeave={() =>
-                                    setOpenBrand(prev => (prev === brandKey ? null : prev))
-                                  }
                                 >
-                                  <span className="nav-mega-brand-label">
-                                    {entry.name}
-                                    <span className="nav-menu-chev nav-menu-chev--right">›</span>
-                                  </span>
-                                  {openBrand === brandKey && (
+                                  <div className="nav-mega-row">
+                                    <span className="nav-mega-brand-label">{entry.name}</span>
+                                    <button
+                                      type="button"
+                                      className="nav-mega-expand"
+                                      aria-expanded={brandOpen}
+                                      aria-label={`Show ${entry.name} models`}
+                                      onClick={e => {
+                                        e.preventDefault()
+                                        e.stopPropagation()
+                                        toggleBrand(brandKey)
+                                      }}
+                                    >
+                                      ›
+                                    </button>
+                                  </div>
+                                  {brandOpen && (
                                     <div className="nav-mega-flyout nav-mega-flyout--nested">
                                       {entry.models.map(m => (
                                         <a
@@ -245,91 +408,6 @@ export default function NavMenu({ onNavigate }: { onNavigate?: () => void }) {
             )}
           </div>
         ))}
-
-        {STATIC_LINKS.map(l => (
-          <a key={l.href} href={l.href} className="nav-menu-static">
-            {l.label}
-          </a>
-        ))}
-      </div>
-
-      <div className="nav-menu-mobile">
-        {pages.map(page => (
-          <details key={page.id} className="nav-mob-cat">
-            <summary>{page.name}</summary>
-            <div className="nav-mob-inner">
-              {page.categories.map(cat => (
-                <details key={cat.id} className="nav-mob-brand">
-                  <summary>{cat.name}</summary>
-                  <div className="nav-mob-inner">
-                    {cat.entries.length === 0 ? (
-                      <a
-                        href={shopNavHref(page.slug, cat.slug)}
-                        onClick={e => {
-                          applyNav(e, pages, page, cat)
-                          close()
-                        }}
-                      >
-                        All {cat.name}
-                      </a>
-                    ) : (
-                      cat.entries.map(entry => {
-                        if (entry.type === 'item') {
-                          return (
-                            <a
-                              key={entry.id}
-                              href={shopNavHref(page.slug, cat.slug, entry.slug)}
-                              onClick={e => {
-                                applyNav(e, pages, page, cat, entry.slug, entry.id, entry.name)
-                                close()
-                              }}
-                            >
-                              {entry.name}
-                            </a>
-                          )
-                        }
-                        return (
-                          <details key={entry.name} className="nav-mob-brand">
-                            <summary>{entry.name}</summary>
-                            <div className="nav-mob-inner">
-                              {entry.models.map(m => (
-                                <a
-                                  key={m.id}
-                                  href={shopNavHref(page.slug, cat.slug, m.slug)}
-                                  onClick={e => {
-                                    applyNav(e, pages, page, cat, m.slug, m.id, m.name)
-                                    close()
-                                  }}
-                                >
-                                  {m.name}
-                                </a>
-                              ))}
-                            </div>
-                          </details>
-                        )
-                      })
-                    )}
-                  </div>
-                </details>
-              ))}
-              <a
-                href={shopNavHref(page.slug)}
-                className="nav-mob-all"
-                onClick={e => {
-                  applyNav(e, pages, page)
-                  close()
-                }}
-              >
-                All {page.name}
-              </a>
-            </div>
-          </details>
-        ))}
-        {STATIC_LINKS.map(l => (
-          <a key={l.href} href={l.href} className="nav-mob-static" onClick={close}>
-            {l.label}
-          </a>
-        ))}
       </div>
 
       <style>{`
@@ -341,10 +419,8 @@ export default function NavMenu({ onNavigate }: { onNavigate?: () => void }) {
           justify-content: center;
           min-width: 0;
         }
-        .nav-menu-mobile { display: none; }
         .nav-menu-item { position: relative; }
-        .nav-menu-trigger,
-        .nav-menu-static {
+        .nav-menu-trigger {
           font-size: 10px;
           letter-spacing: 0.14em;
           text-transform: uppercase;
@@ -360,100 +436,100 @@ export default function NavMenu({ onNavigate }: { onNavigate?: () => void }) {
           transition: color 0.25s;
           white-space: nowrap;
         }
-        .nav-menu-static { text-decoration: none; }
         .nav-menu-trigger:hover,
-        .nav-menu-trigger.is-open,
-        .nav-menu-static:hover { color: var(--gold); }
+        .nav-menu-trigger.is-open { color: var(--gold); }
         .nav-menu-chev { font-size: 8px; opacity: 0.7; }
-        .nav-menu-chev--right { font-size: 11px; margin-left: auto; }
         .nav-mega {
           position: absolute;
-          top: 100%;
+          top: calc(100% + 4px);
           left: 0;
-          min-width: 240px;
+          min-width: 260px;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
           background: #f6f2ea;
           border: 1px solid rgba(0, 0, 0, 0.08);
           box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
           z-index: 800;
-          padding: 8px 0;
         }
-        .nav-mega-col { max-height: min(70vh, 460px); overflow-y: auto; }
+        .nav-mega-col {
+          max-height: min(70vh, 420px);
+          overflow-x: hidden;
+          overflow-y: auto;
+        }
+        .nav-mega-row {
+          display: flex;
+          align-items: stretch;
+          min-height: 40px;
+        }
+        .nav-mega-row:hover { background: rgba(0, 0, 0, 0.06); }
         .nav-mega-link,
         .nav-mega-brand-label {
           display: flex;
           align-items: center;
+          flex: 1;
+          min-width: 0;
           gap: 8px;
-          padding: 10px 18px;
+          padding: 10px 14px 10px 18px;
           font-size: 12px;
           font-weight: 500;
           color: #111;
           text-decoration: none;
-          transition: background 0.15s;
         }
-        .nav-mega-link:hover,
-        .nav-mega-brand:hover > .nav-mega-brand-label {
-          background: rgba(0, 0, 0, 0.06);
-        }
+        .nav-mega-link:hover { background: rgba(0, 0, 0, 0.06); }
         .nav-mega-brand { position: relative; }
+        .nav-mega-brand.is-open > .nav-mega-row { background: rgba(0, 0, 0, 0.06); }
+        .nav-mega-expand {
+          flex-shrink: 0;
+          width: 42px;
+          border: none;
+          background: transparent;
+          color: #555;
+          font-size: 18px;
+          line-height: 1;
+          cursor: pointer;
+          font-family: inherit;
+          padding: 0;
+        }
+        .nav-mega-expand:hover { color: #111; background: rgba(0, 0, 0, 0.08); }
         .nav-mega-flyout {
           position: absolute;
-          left: 100%;
+          left: calc(100% - 8px);
           top: 0;
-          min-width: 200px;
+          min-width: 220px;
           background: #f6f2ea;
           border: 1px solid rgba(0, 0, 0, 0.08);
           box-shadow: 8px 12px 32px rgba(0, 0, 0, 0.2);
-          padding: 8px 0;
+          padding: 8px 0 8px 8px;
           z-index: 810;
+        }
+        .nav-mega-flyout::before {
+          content: '';
+          position: absolute;
+          right: 100%;
+          top: 0;
+          width: 12px;
+          height: 100%;
         }
         .nav-mega-flyout--nested { z-index: 820; }
         .nav-mega-all {
           display: block;
-          padding: 10px 18px;
+          flex-shrink: 0;
+          padding: 12px 18px;
           font-size: 10px;
           letter-spacing: 0.12em;
           text-transform: uppercase;
           color: #666;
+          background: #f6f2ea;
           border-top: 1px solid rgba(0, 0, 0, 0.08);
           text-decoration: none;
         }
         .nav-mega-all:hover { color: #111; background: rgba(0, 0, 0, 0.04); }
         @media (max-width: 1100px) {
-          .nav-menu-trigger, .nav-menu-static { padding: 8px 6px; font-size: 9px; }
+          .nav-menu-trigger { padding: 8px 6px; font-size: 9px; }
         }
         @media (max-width: 768px) {
-          .nav-menu-desktop { display: none; }
-          .nav-menu-mobile { display: block; width: 100%; }
-          .nav-mob-cat, .nav-mob-brand { border-bottom: 1px solid var(--line); }
-          .nav-mob-cat > summary, .nav-mob-brand > summary {
-            padding: 14px 0;
-            font-size: 18px;
-            font-family: var(--serif);
-            color: var(--cream);
-            cursor: pointer;
-            list-style: none;
-          }
-          .nav-mob-cat > summary::-webkit-details-marker,
-          .nav-mob-brand > summary::-webkit-details-marker { display: none; }
-          .nav-mob-inner {
-            padding: 0 0 12px 16px;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-          }
-          .nav-mob-inner a, .nav-mob-all, .nav-mob-static {
-            font-size: 14px;
-            color: rgba(246, 242, 234, 0.75);
-            text-decoration: none;
-          }
-          .nav-mob-inner a:hover, .nav-mob-all:hover, .nav-mob-static:hover { color: var(--gold); }
-          .nav-mob-brand > summary { font-size: 15px; padding: 10px 0; }
-          .nav-mob-static {
-            display: block;
-            padding: 14px 0;
-            font-size: 20px;
-            font-family: var(--serif);
-          }
+          .nav-menu-desktop { display: none !important; }
         }
       `}</style>
     </>

@@ -46,7 +46,7 @@ export default function Nav() {
           />
         </a>
 
-        <NavMenu />
+        <NavMenu variant="desktop" />
 
         <div style={{display:'flex',alignItems:'center',gap:12,flexShrink:0}}>
           <button
@@ -84,7 +84,7 @@ export default function Nav() {
 
       <div className={`nav-backdrop${mobOpen?' show':''}`} onClick={close}/>
       <div className={`mob-nav${mobOpen?' open':''}`}>
-        <NavMenu onNavigate={close} />
+        <NavMenu variant="mobile" onNavigate={close} />
         <button className="btn-fill" style={{marginTop:16,alignSelf:'flex-start'}} onClick={()=>{close();dispatch({type:'OPEN'})}}>
           <span>Cart</span>
         </button>
@@ -125,7 +125,6 @@ export default function Nav() {
             height: 28px;
             max-width: min(168px, 58vw);
           }
-          .nav-menu-desktop{ display:none!important; }
           #ham-btn{ display:flex!important; }
           .nav-cart-btn, .nav-wishlist-btn{ display:none!important; }
         }
