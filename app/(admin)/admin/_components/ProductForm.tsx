@@ -52,7 +52,7 @@ export default function ProductForm({
     ;(async () => {
       try {
         const [c, m] = await Promise.all([
-          fetch('/api/admin/categories', { cache: 'no-store' }).then(r => r.json()),
+          fetch('/api/admin/categories?counts=0', { cache: 'no-store' }).then(r => r.json()),
           fetch('/api/admin/models', { cache: 'no-store' }).then(r => r.json()),
         ])
         if (cancelled) return

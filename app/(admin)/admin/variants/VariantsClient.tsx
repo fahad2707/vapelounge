@@ -30,7 +30,7 @@ export default function VariantsClient() {
     setLoading(true); setErr(null)
     try {
       const [p, g] = await Promise.all([
-        fetch('/api/admin/products', { cache: 'no-store' }).then(r => r.json()),
+        fetch('/api/admin/products?slim=1&limit=1000', { cache: 'no-store' }).then(r => r.json()),
         fetch('/api/admin/variants', { cache: 'no-store' }).then(r => r.json()),
       ])
       setProducts(Array.isArray(p?.products) ? p.products : [])

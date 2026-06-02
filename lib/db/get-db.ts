@@ -4,19 +4,15 @@ import { ensureDbIndexes } from '@/lib/db/indexes'
 
 let indexesStarted = false
 
-/** DB accessor — indexes build in background (never block reads). */
+/** DB accessor — indexes build once in the background (idempotent, fast if they exist). */
 export async function getDb(): Promise<Db | null> {
   const client = await connectMongo()
   if (!client) return null
   const db = client.db(getDbName())
 
-  // Avoid hammering Atlas with many createIndex calls during serverless cold starts.
   if (!indexesStarted) {
     indexesStarted = true
-    const runIndexes = process.env.MONGODB_ENSURE_INDEXES === '1'
-    if (runIndexes || process.env.NODE_ENV !== 'production') {
-      void ensureDbIndexes(db)
-    }
+    void ensureDbIndexes(db)
   }
 
   return db

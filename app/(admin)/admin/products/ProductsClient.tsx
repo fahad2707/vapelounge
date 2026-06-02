@@ -72,7 +72,10 @@ export default function ProductsClient() {
           error?: string
         }
         if (!r.ok) {
-          setLoadErr(j.error || 'Failed to load products.')
+          setLoadErr(
+            j.error ||
+              (r.status === 504 ? 'Request timed out. Refresh the page.' : 'Failed to load products.'),
+          )
           if (!opts?.append) setProducts([])
           setHasMore(false)
         } else {

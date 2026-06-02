@@ -29,7 +29,7 @@ export default function ModelDetailClient({ modelId }: { modelId: string }) {
     try {
       const [mRes, cRes, mAll, p] = await Promise.all([
         fetch(`/api/admin/models/${modelId}`, { cache: 'no-store' }).then(r => r.json()),
-        fetch('/api/admin/categories', { cache: 'no-store' }).then(r => r.json()),
+        fetch('/api/admin/categories?counts=0', { cache: 'no-store' }).then(r => r.json()),
         fetch('/api/admin/models', { cache: 'no-store' }).then(r => r.json()),
         fetch('/api/admin/products', { cache: 'no-store' }).then(r => r.json()),
       ])

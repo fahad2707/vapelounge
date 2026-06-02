@@ -13,6 +13,15 @@ import { revalidateCatalogCache } from '@/lib/server/revalidate-catalog'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
+const ADMIN_PRODUCT_SLIM_PROJECTION = {
+  handleId: 1,
+  name: 1,
+  image: 1,
+  brand: 1,
+  variantGroupId: 1,
+  visible: 1,
+} as const
+
 function descriptionForAdmin(d: ProductDoc): string {
   const plain = (d.descriptionPlain || '').trim()
   if (plain) return plain
@@ -37,13 +46,15 @@ export async function GET(req: Request) {
   const block = await requireAdmin()
   if (block) return block
   const { searchParams } = new URL(req.url)
-  const limit = parseIntSafe(searchParams.get('limit'), 80, 20, 200)
+  const slim = searchParams.get('slim') === '1'
+  const limit = parseIntSafe(searchParams.get('limit'), slim ? 500 : 80, 20, slim ? 1000 : 200)
   const skip = parseIntSafe(searchParams.get('skip'), 0, 0, 50_000)
   const q = searchParams.get('q')?.trim().toLowerCase() || ''
 
   try {
     const db = await getAdminDb()
     const col = db.collection<ProductDoc>(COL.products)
+    const projection = slim ? ADMIN_PRODUCT_SLIM_PROJECTION : ADMIN_PRODUCT_LIST_PROJECTION
     const filter = q
       ? {
           $or: [
@@ -56,10 +67,11 @@ export async function GET(req: Request) {
       : {}
 
     const docs = await col
-      .find(filter, { projection: ADMIN_PRODUCT_LIST_PROJECTION })
+      .find(filter, { projection })
       .sort({ updatedAt: -1, name: 1 })
       .skip(skip)
       .limit(limit + 1)
+      .maxTimeMS(25_000)
       .toArray()
 
     const hasMore = docs.length > limit
@@ -67,8 +79,17 @@ export async function GET(req: Request) {
 
     return NextResponse.json({
       products: page.map(d => {
-        const images =
-          d.images?.length ? d.images : d.image ? [d.image] : []
+        if (slim) {
+          return {
+            handleId: d.handleId,
+            name: d.name,
+            image: d.image || '',
+            brand: d.brand ?? null,
+            variantGroupId: d.variantGroupId ?? null,
+            visible: d.visible !== false,
+          }
+        }
+        const images = d.images?.length ? d.images : d.image ? [d.image] : []
         return {
           handleId: d.handleId,
           name: d.name,

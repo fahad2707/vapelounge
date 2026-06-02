@@ -102,42 +102,22 @@ export function productFilterForCategory(catId: string, catName: string) {
   return buildCategoryProductFilter(catId, catName)
 }
 
-/** Batch product counts for admin category table (one DB round-trip). */
+/** Batch product counts for admin category table (indexed count per category). */
 export async function batchCategoryProductCounts(
   db: Db,
   categories: CategoryDoc[],
 ): Promise<Record<string, number>> {
-  const rows = await db
-    .collection<ProductDoc>(COL.products)
-    .find({ visible: true }, { projection: { categoryId: 1, brand: 1, primaryCategory: 1, categories: 1 } })
-    .toArray()
+  if (!categories.length) return {}
 
-  const out: Record<string, number> = {}
-  for (const cat of categories) {
-    const id = (cat._id as ObjectId).toString()
-    const name = cat.name
-    const nameLower = name.toLowerCase()
-    let n = 0
-    for (const p of rows) {
-      if (p.categoryId === id) {
-        n++
-        continue
-      }
-      if ((p.brand || '').trim().toLowerCase() === nameLower) {
-        n++
-        continue
-      }
-      if ((p.primaryCategory || '').trim().toLowerCase() === nameLower) {
-        n++
-        continue
-      }
-      if (Array.isArray(p.categories) && p.categories.some(c => (c || '').trim().toLowerCase() === nameLower)) {
-        n++
-      }
-    }
-    out[id] = n
-  }
-  return out
+  const col = db.collection<ProductDoc>(COL.products)
+  const pairs = await Promise.all(
+    categories.map(async cat => {
+      const id = (cat._id as ObjectId).toString()
+      const n = await col.countDocuments(buildCategoryProductFilter(id, cat.name))
+      return [id, n] as const
+    }),
+  )
+  return Object.fromEntries(pairs)
 }
 
 export async function countProductsForCategory(db: Db, catId: string, catName: string): Promise<number> {

@@ -35,6 +35,9 @@ async function createDbIndexes(db: Db): Promise<void> {
         partialFilterExpression: { visible: { $ne: false } },
       },
     ),
+    db.collection(COL.products).createIndex({ categoryId: 1 }, { name: 'products_categoryId' }),
+    db.collection(COL.products).createIndex({ brand: 1 }, { name: 'products_brand' }),
+    db.collection(COL.products).createIndex({ sku: 1 }, { name: 'products_sku' }),
     db.collection(COL.categories).createIndex(
       { featured: -1, name: 1 },
       { name: 'admin_list_featured_name' },

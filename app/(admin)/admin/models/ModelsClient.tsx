@@ -24,7 +24,7 @@ export default function ModelsClient() {
     setLoading(true); setErr(null)
     try {
       const [c, m] = await Promise.all([
-        fetch('/api/admin/categories', { cache: 'no-store' }).then(r => r.json()),
+        fetch('/api/admin/categories?counts=0', { cache: 'no-store' }).then(r => r.json()),
         fetch('/api/admin/models', { cache: 'no-store' }).then(r => r.json()),
       ])
       setCategories(Array.isArray(c?.categories) ? c.categories : [])

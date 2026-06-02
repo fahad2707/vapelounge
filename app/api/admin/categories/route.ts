@@ -11,7 +11,11 @@ import {
   batchCategoryProductCounts,
   syncCategoriesFromProducts,
 } from '@/lib/server/categories'
+import { formatMongoError } from '@/lib/mongodb'
 import { revalidateCatalogCache } from '@/lib/server/revalidate-catalog'
+
+export const dynamic = 'force-dynamic'
+export const maxDuration = 60
 
 export async function GET(req: Request) {
   const block = await requireAdmin()
@@ -28,9 +32,11 @@ export async function GET(req: Request) {
       .collection<CategoryDoc>(COL.categories)
       .find({})
       .sort({ shopDisplay: -1, featured: -1, name: 1 })
+      .maxTimeMS(20_000)
       .toArray()
 
-    const counts = await batchCategoryProductCounts(db, docs)
+    const withCounts = searchParams.get('counts') !== '0'
+    const counts = withCounts ? await batchCategoryProductCounts(db, docs) : {}
 
     const categories = docs.map(d => {
       const id = (d._id as ObjectId).toString()
@@ -51,7 +57,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ categories, synced })
   } catch (err) {
     console.error('[admin/categories GET]', err)
-    return NextResponse.json({ error: (err as Error).message }, { status: 500 })
+    return NextResponse.json({ error: formatMongoError(err) }, { status: 500 })
   }
 }
 
@@ -122,6 +128,6 @@ export async function POST(req: Request) {
     })
   } catch (err) {
     console.error('[admin/categories POST]', err)
-    return NextResponse.json({ error: (err as Error).message }, { status: 500 })
+    return NextResponse.json({ error: formatMongoError(err) }, { status: 500 })
   }
 }

@@ -86,14 +86,14 @@ export function formatMongoError(err: unknown): string {
     return (
       `Database connection timed out to ${info.host}. ` +
       'That is a direct IP host, not MongoDB Atlas — Atlas Network Access will not help. ' +
-      'Either open firewall port 27017 for your app host, or change MONGODB_URI on Vercel to your Atlas string (mongodb+srv://….mongodb.net/…).'
+      'Either open firewall port 27017 for that host, or change MONGODB_URI on Vercel to your Atlas string (mongodb+srv://….mongodb.net/…).'
     )
   }
 
   if (info.isAtlas && info.host) {
     return (
       `Database connection timed out (Atlas: ${info.host}). ` +
-      'In Atlas, confirm the cluster is not paused, the database user password in Vercel matches Database Access, ' +
+      'In Atlas, confirm the cluster is not paused, credentials in Vercel match Database Access, ' +
       'and Network Access allows 0.0.0.0/0. Then redeploy after saving MONGODB_URI.'
     )
   }
@@ -106,8 +106,7 @@ export function formatMongoError(err: unknown): string {
 
 /**
  * Forget the cached client promise so the next call connects again.
- * Does NOT call client.close() — closing kills in-flight work on other concurrent
- * serverless requests and causes "Cannot use a session that has ended".
+ * Does NOT call client.close() — closing kills in-flight work on concurrent serverless requests.
  */
 export function resetMongoClient(): void {
   globalForMongo.mongoClientPromise = undefined
@@ -119,12 +118,13 @@ function getMongoClientPromise(): Promise<MongoClient> | null {
 
   if (!globalForMongo.mongoClientPromise) {
     const client = new MongoClient(uri, {
-      maxPoolSize: 1,
+      // Allow parallel admin fetches (categories + products + models) on one warm instance.
+      maxPoolSize: 5,
       minPoolSize: 0,
       maxIdleTimeMS: 120_000,
-      waitQueueTimeoutMS: 15_000,
-      serverSelectionTimeoutMS: 12_000,
-      connectTimeoutMS: 12_000,
+      waitQueueTimeoutMS: 25_000,
+      serverSelectionTimeoutMS: 15_000,
+      connectTimeoutMS: 15_000,
       socketTimeoutMS: 45_000,
       heartbeatFrequencyMS: 10_000,
     })
@@ -136,7 +136,7 @@ function getMongoClientPromise(): Promise<MongoClient> | null {
   return globalForMongo.mongoClientPromise
 }
 
-/** Connect with retries and a ping to avoid serving requests on dead sockets. */
+/** Connect with one retry. No per-request ping — that added ~10s+ on slow Atlas links. */
 export async function connectMongo(): Promise<MongoClient | null> {
   if (!process.env.MONGODB_URI?.trim()) return null
 
@@ -146,15 +146,13 @@ export async function connectMongo(): Promise<MongoClient | null> {
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     if (attempt > 0) {
       resetMongoClient()
-      await sleep(600)
+      await sleep(500)
     }
 
     try {
       const promise = getMongoClientPromise()
       if (!promise) return null
-      const client = await promise
-      await client.db(getDbName()).command({ ping: 1 }, { timeoutMS: 10_000 })
-      return client
+      return await promise
     } catch (err) {
       lastErr = err
       if (attempt < maxAttempts - 1) resetMongoClient()

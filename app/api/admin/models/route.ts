@@ -5,7 +5,11 @@ import { getAdminDb } from '@/lib/admin/db'
 import { requireAdmin } from '@/lib/admin/guard'
 import { slugify } from '@/lib/admin/slug'
 import type { ModelDoc, CategoryDoc } from '@/lib/db/product-doc'
+import { formatMongoError } from '@/lib/mongodb'
 import { revalidateCatalogCache } from '@/lib/server/revalidate-catalog'
+
+export const dynamic = 'force-dynamic'
+export const maxDuration = 60
 
 export async function GET() {
   const block = await requireAdmin()
@@ -16,6 +20,7 @@ export async function GET() {
       .collection<ModelDoc>(COL.models)
       .find({})
       .sort({ name: 1 })
+      .maxTimeMS(15_000)
       .toArray()
     return NextResponse.json({
       models: docs.map(d => ({
@@ -26,7 +31,8 @@ export async function GET() {
       })),
     })
   } catch (err) {
-    return NextResponse.json({ error: (err as Error).message }, { status: 500 })
+    console.error('[admin/models GET]', err)
+    return NextResponse.json({ error: formatMongoError(err) }, { status: 500 })
   }
 }
 
