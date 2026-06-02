@@ -59,7 +59,7 @@ export function isMongoConnectionError(err: unknown): boolean {
   const msg = String((err as Error).message || '')
   const name = String((err as { name?: string }).name || '')
   return (
-    /timed out|timeout|ECONNRESET|ECONNREFUSED|ENOTFOUND|connection closed|network error/i.test(
+    /timed out|timeout|ECONNRESET|ECONNREFUSED|ENOTFOUND|connection closed|network error|session that has ended|client must be connected/i.test(
       msg,
     ) || /MongoNetwork|MongoServerSelection|MongoTimeout/i.test(name)
   )
@@ -67,8 +67,13 @@ export function isMongoConnectionError(err: unknown): boolean {
 
 /** User-facing message for admin API responses. */
 export function formatMongoError(err: unknown): string {
+  const msg = String((err as Error)?.message || '')
+  if (/session that has ended|client must be connected/i.test(msg)) {
+    return 'Database connection was interrupted. Refresh the page and try again.'
+  }
+
   if (!isMongoConnectionError(err)) {
-    return (err as Error)?.message || 'Database error'
+    return msg || 'Database error'
   }
 
   const info = getMongoConnectionInfo()
@@ -99,13 +104,13 @@ export function formatMongoError(err: unknown): string {
   )
 }
 
-/** Drop cached client so the next request opens a fresh connection (stale pool on serverless). */
+/**
+ * Forget the cached client promise so the next call connects again.
+ * Does NOT call client.close() — closing kills in-flight work on other concurrent
+ * serverless requests and causes "Cannot use a session that has ended".
+ */
 export function resetMongoClient(): void {
-  const existing = globalForMongo.mongoClientPromise
   globalForMongo.mongoClientPromise = undefined
-  if (existing) {
-    void existing.then(c => c.close(true).catch(() => {}))
-  }
 }
 
 function getMongoClientPromise(): Promise<MongoClient> | null {
@@ -116,7 +121,7 @@ function getMongoClientPromise(): Promise<MongoClient> | null {
     const client = new MongoClient(uri, {
       maxPoolSize: 1,
       minPoolSize: 0,
-      maxIdleTimeMS: 30_000,
+      maxIdleTimeMS: 120_000,
       waitQueueTimeoutMS: 15_000,
       serverSelectionTimeoutMS: 12_000,
       connectTimeoutMS: 12_000,
@@ -152,7 +157,7 @@ export async function connectMongo(): Promise<MongoClient | null> {
       return client
     } catch (err) {
       lastErr = err
-      resetMongoClient()
+      if (attempt < maxAttempts - 1) resetMongoClient()
       if (!isMongoConnectionError(err) || attempt === maxAttempts - 1) throw err
     }
   }
