@@ -7,6 +7,7 @@ import { stripHtml } from '@/lib/catalog/html'
 import type { CategoryDoc, ProductDoc } from '@/lib/db/product-doc'
 import { ADMIN_PRODUCT_DETAIL_PROJECTION } from '@/lib/server/brand-filter'
 import { formatMongoError } from '@/lib/mongodb'
+import { clearAdminProductsCache } from '@/lib/server/admin-products'
 import { revalidateCatalogCache } from '@/lib/server/revalidate-catalog'
 
 export const dynamic = 'force-dynamic'
@@ -155,6 +156,7 @@ export async function PATCH(
       .collection<ProductDoc>(COL.products)
       .findOneAndUpdate({ handleId }, { $set: update }, { returnDocument: 'after' })
     if (!r) return NextResponse.json({ error: 'Product not found' }, { status: 404 })
+    clearAdminProductsCache()
     revalidateCatalogCache()
     return NextResponse.json({ ok: true, product: r })
   } catch (err) {
@@ -177,6 +179,7 @@ export async function DELETE(
     const db = await getAdminDb()
     const r = await db.collection<ProductDoc>(COL.products).deleteOne({ handleId })
     if (r.deletedCount === 0) return NextResponse.json({ error: 'Product not found' }, { status: 404 })
+    clearAdminProductsCache()
     revalidateCatalogCache()
     return NextResponse.json({ ok: true })
   } catch (err) {

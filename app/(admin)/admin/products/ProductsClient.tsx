@@ -41,7 +41,7 @@ function formatCad(n: number): string {
 
 async function fetchProductPage(params: { skip: number; q: string }) {
   const sp = new URLSearchParams()
-  sp.set('limit', '60')
+  sp.set('limit', '36')
   sp.set('skip', String(params.skip))
   if (params.q.trim()) sp.set('q', params.q.trim())
   const r = await fetch(`/api/admin/products?${sp}`, { cache: 'no-store' })
@@ -59,11 +59,20 @@ async function fetchProductPage(params: { skip: number; q: string }) {
   return { products: j.products || [], hasMore: !!j.hasMore }
 }
 
-export default function ProductsClient() {
-  const [products, setProducts] = useState<AdminProduct[]>([])
-  const [loading, setLoading] = useState(true)
+export default function ProductsClient({
+  initialProducts = [],
+  initialHasMore = false,
+  initialError = null,
+}: {
+  initialProducts?: AdminProduct[]
+  initialHasMore?: boolean
+  initialError?: string | null
+}) {
+  const skipFirstFetch = useRef(initialProducts.length > 0)
+  const [products, setProducts] = useState<AdminProduct[]>(initialProducts)
+  const [loading, setLoading] = useState(initialProducts.length === 0 && !initialError)
   const [loadingMore, setLoadingMore] = useState(false)
-  const [loadErr, setLoadErr] = useState<string | null>(null)
+  const [loadErr, setLoadErr] = useState<string | null>(initialError)
   const [q, setQ] = useState('')
   const [showHidden, setShowHidden] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
@@ -74,8 +83,8 @@ export default function ProductsClient() {
   const [savedToast, setSavedToast] = useState<string | null>(null)
   const [editLoading, setEditLoading] = useState(false)
 
-  const [hasMore, setHasMore] = useState(false)
-  const skipRef = useRef(0)
+  const [hasMore, setHasMore] = useState(initialHasMore)
+  const skipRef = useRef(initialProducts.length)
 
   const reloadList = useCallback(async () => {
     setLoading(true)
@@ -96,6 +105,10 @@ export default function ProductsClient() {
   }, [q])
 
   useEffect(() => {
+    if (skipFirstFetch.current && !q.trim()) {
+      skipFirstFetch.current = false
+      return
+    }
     let cancelled = false
     const timer = window.setTimeout(
       () => {
@@ -288,7 +301,14 @@ export default function ProductsClient() {
         </label>
       </div>
 
-      {loadErr && <div className="adm-error" style={{ marginBottom: 14 }}>{loadErr}</div>}
+      {loadErr && (
+        <div className="adm-error" style={{ marginBottom: 14, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <span>{loadErr}</span>
+          <button type="button" className="adm-btn adm-btn-ghost adm-btn-sm" onClick={() => void reloadList()}>
+            Retry
+          </button>
+        </div>
+      )}
 
       {!loading && filtered.length === 0 && !loadErr && (
         <div className="adm-card adm-card-pad" style={{ textAlign: 'center', color: '#64748B' }}>

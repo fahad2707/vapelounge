@@ -5,7 +5,13 @@ import { getAdminDb } from '@/lib/admin/db'
 import { requireAdmin } from '@/lib/admin/guard'
 import { randSuffix, slugify } from '@/lib/admin/slug'
 import type { CategoryDoc, ProductDoc } from '@/lib/db/product-doc'
-import { ADMIN_PRODUCT_GRID_PROJECTION } from '@/lib/server/brand-filter'
+import {
+  cacheKeyForGrid,
+  clearAdminProductsCache,
+  getCachedAdminProducts,
+  listAdminProductsForGrid,
+  setCachedAdminProducts,
+} from '@/lib/server/admin-products'
 import { formatMongoError } from '@/lib/mongodb'
 import { revalidateCatalogCache } from '@/lib/server/revalidate-catalog'
 
@@ -40,71 +46,57 @@ export async function GET(req: Request) {
   if (block) return block
   const { searchParams } = new URL(req.url)
   const slim = searchParams.get('slim') === '1'
-  const limit = parseIntSafe(searchParams.get('limit'), slim ? 500 : 80, 20, slim ? 1000 : 200)
+  const limit = parseIntSafe(searchParams.get('limit'), slim ? 500 : 36, 12, slim ? 1000 : 100)
   const skip = parseIntSafe(searchParams.get('skip'), 0, 0, 50_000)
-  const q = searchParams.get('q')?.trim().toLowerCase() || ''
+  const q = searchParams.get('q')?.trim() || ''
 
   try {
-    const db = await getAdminDb()
-    const col = db.collection<ProductDoc>(COL.products)
-    const projection = slim ? ADMIN_PRODUCT_SLIM_PROJECTION : ADMIN_PRODUCT_GRID_PROJECTION
-    const filter = q
-      ? {
-          $or: [
-            { name: { $regex: q, $options: 'i' } },
-            { sku: { $regex: q, $options: 'i' } },
-            { brand: { $regex: q, $options: 'i' } },
-            { primaryCategory: { $regex: q, $options: 'i' } },
-          ],
-        }
-      : {}
-
-    const docs = await col
-      .find(filter, { projection })
-      .sort({ name: 1 })
-      .skip(skip)
-      .limit(limit + 1)
-      .maxTimeMS(20_000)
-      .toArray()
-
-    const hasMore = docs.length > limit
-    const page = hasMore ? docs.slice(0, limit) : docs
-
-    return NextResponse.json({
-      products: page.map(d => {
-        if (slim) {
-          return {
-            handleId: d.handleId,
-            name: d.name,
-            image: d.image || '',
-            brand: d.brand ?? null,
-            variantGroupId: d.variantGroupId ?? null,
-            visible: d.visible !== false,
+    if (slim) {
+      const db = await getAdminDb()
+      const col = db.collection<ProductDoc>(COL.products)
+      const filter = q
+        ? {
+            $or: [
+              { name: { $regex: q, $options: 'i' } },
+              { sku: { $regex: q, $options: 'i' } },
+              { brand: { $regex: q, $options: 'i' } },
+            ],
           }
-        }
-        const images = d.images?.length ? d.images : d.image ? [d.image] : []
-        return {
+        : {}
+      const docs = await col
+        .find(filter, { projection: ADMIN_PRODUCT_SLIM_PROJECTION })
+        .sort({ name: 1 })
+        .skip(skip)
+        .limit(limit + 1)
+        .maxTimeMS(8_000)
+        .toArray()
+      const hasMore = docs.length > limit
+      const page = hasMore ? docs.slice(0, limit) : docs
+      return NextResponse.json({
+        products: page.map(d => ({
           handleId: d.handleId,
           name: d.name,
-          sku: d.sku ?? null,
-          image: images[0] || d.image || '',
-          images,
-          price: d.price ?? 0,
-          costPrice: d.costPrice ?? null,
-          quantity: d.quantity ?? null,
-          visible: d.visible !== false,
-          inStock: d.inStock !== false,
-          primaryCategory: d.primaryCategory || '',
+          image: d.image || '',
           brand: d.brand ?? null,
-          descriptionPlain: '',
-          categoryId: d.categoryId ?? null,
-          modelId: d.modelId ?? null,
-        }
-      }),
-      hasMore,
-      limit,
-      skip,
-    })
+          variantGroupId: d.variantGroupId ?? null,
+          visible: d.visible !== false,
+        })),
+        hasMore,
+        limit,
+        skip,
+      })
+    }
+
+    const cacheKey = cacheKeyForGrid(skip, limit, q)
+    const cached = getCachedAdminProducts(cacheKey)
+    if (cached) {
+      return NextResponse.json(cached)
+    }
+
+    const db = await getAdminDb()
+    const result = await listAdminProductsForGrid(db, { skip, limit, q })
+    setCachedAdminProducts(cacheKey, result)
+    return NextResponse.json(result)
   } catch (err) {
     console.error('[admin/products GET]', err)
     return NextResponse.json({ error: formatMongoError(err) }, { status: 500 })
@@ -198,6 +190,7 @@ export async function POST(req: Request) {
 
   try {
     await db.collection<ProductDoc>(COL.products).insertOne(doc)
+    clearAdminProductsCache()
     revalidateCatalogCache()
     return NextResponse.json({ ok: true, product: doc })
   } catch (err) {
