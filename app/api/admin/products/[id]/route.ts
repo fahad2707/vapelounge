@@ -4,6 +4,7 @@ import { COL } from '@/lib/db/collections'
 import { getAdminDb } from '@/lib/admin/db'
 import { requireAdmin } from '@/lib/admin/guard'
 import type { CategoryDoc, ProductDoc } from '@/lib/db/product-doc'
+import { formatMongoError } from '@/lib/mongodb'
 import { revalidateCatalogCache } from '@/lib/server/revalidate-catalog'
 
 async function categoryNameFor(db: Awaited<ReturnType<typeof getAdminDb>>, id: string | null | undefined): Promise<string | null> {
@@ -104,7 +105,7 @@ export async function PATCH(
     return NextResponse.json({ ok: true, product: r })
   } catch (err) {
     console.error('[admin/products PATCH]', err)
-    return NextResponse.json({ error: (err as Error).message }, { status: 500 })
+    return NextResponse.json({ error: formatMongoError(err) }, { status: 500 })
   }
 }
 
@@ -126,6 +127,6 @@ export async function DELETE(
     return NextResponse.json({ ok: true })
   } catch (err) {
     console.error('[admin/products DELETE]', err)
-    return NextResponse.json({ error: (err as Error).message }, { status: 500 })
+    return NextResponse.json({ error: formatMongoError(err) }, { status: 500 })
   }
 }

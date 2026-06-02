@@ -5,8 +5,16 @@ import { getAdminDb } from '@/lib/admin/db'
 import { requireAdmin } from '@/lib/admin/guard'
 import { randSuffix, slugify } from '@/lib/admin/slug'
 import type { CategoryDoc, ProductDoc } from '@/lib/db/product-doc'
+import { stripHtml } from '@/lib/catalog/html'
 import { ADMIN_PRODUCT_LIST_PROJECTION } from '@/lib/server/brand-filter'
+import { formatMongoError } from '@/lib/mongodb'
 import { revalidateCatalogCache } from '@/lib/server/revalidate-catalog'
+
+function descriptionForAdmin(d: ProductDoc): string {
+  const plain = (d.descriptionPlain || '').trim()
+  if (plain) return plain
+  return stripHtml(d.descriptionHtml || '')
+}
 
 function parseIntSafe(v: string | null, fallback: number, min: number, max: number) {
   const n = Number.parseInt(v ?? '', 10)
@@ -55,28 +63,34 @@ export async function GET(req: Request) {
     const page = hasMore ? docs.slice(0, limit) : docs
 
     return NextResponse.json({
-      products: page.map(d => ({
-        handleId: d.handleId,
-        name: d.name,
-        sku: d.sku ?? null,
-        image: d.image || '',
-        images: d.image ? [d.image] : [],
-        price: d.price,
-        visible: d.visible !== false,
-        inStock: d.inStock !== false,
-        primaryCategory: d.primaryCategory,
-        brand: d.brand ?? null,
-        descriptionPlain: '',
-        categoryId: d.categoryId ?? null,
-        modelId: d.modelId ?? null,
-      })),
+      products: page.map(d => {
+        const images =
+          d.images?.length ? d.images : d.image ? [d.image] : []
+        return {
+          handleId: d.handleId,
+          name: d.name,
+          sku: d.sku ?? null,
+          image: images[0] || d.image || '',
+          images,
+          price: d.price,
+          costPrice: d.costPrice ?? null,
+          quantity: d.quantity ?? null,
+          visible: d.visible !== false,
+          inStock: d.inStock !== false,
+          primaryCategory: d.primaryCategory,
+          brand: d.brand ?? null,
+          descriptionPlain: descriptionForAdmin(d),
+          categoryId: d.categoryId ?? null,
+          modelId: d.modelId ?? null,
+        }
+      }),
       hasMore,
       limit,
       skip,
     })
   } catch (err) {
     console.error('[admin/products GET]', err)
-    return NextResponse.json({ error: (err as Error).message }, { status: 500 })
+    return NextResponse.json({ error: formatMongoError(err) }, { status: 500 })
   }
 }
 
@@ -171,6 +185,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, product: doc })
   } catch (err) {
     console.error('[admin/products POST]', err)
-    return NextResponse.json({ error: (err as Error).message }, { status: 500 })
+    return NextResponse.json({ error: formatMongoError(err) }, { status: 500 })
   }
 }
