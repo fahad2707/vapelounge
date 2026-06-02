@@ -71,13 +71,12 @@ export const PRODUCT_LIST_PROJECTION = {
   modelId: 1,
 } as const
 
-export const ADMIN_PRODUCT_LIST_PROJECTION = {
+/** Admin product grid — no descriptions (loaded on edit via GET /api/admin/products/:id). */
+export const ADMIN_PRODUCT_GRID_PROJECTION = {
   handleId: 1,
   name: 1,
   image: 1,
   images: 1,
-  descriptionPlain: 1,
-  descriptionHtml: 1,
   primaryCategory: 1,
   price: 1,
   costPrice: 1,
@@ -88,5 +87,13 @@ export const ADMIN_PRODUCT_LIST_PROJECTION = {
   visible: 1,
   categoryId: 1,
   modelId: 1,
-  updatedAt: 1,
 } as const
+
+export const ADMIN_PRODUCT_DETAIL_PROJECTION = {
+  ...ADMIN_PRODUCT_GRID_PROJECTION,
+  descriptionPlain: 1,
+  descriptionHtml: 1,
+} as const
+
+/** @deprecated Use ADMIN_PRODUCT_GRID_PROJECTION for lists. */
+export const ADMIN_PRODUCT_LIST_PROJECTION = ADMIN_PRODUCT_DETAIL_PROJECTION

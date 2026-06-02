@@ -3,12 +3,63 @@ import { ObjectId } from 'mongodb'
 import { COL } from '@/lib/db/collections'
 import { getAdminDb } from '@/lib/admin/db'
 import { requireAdmin } from '@/lib/admin/guard'
+import { stripHtml } from '@/lib/catalog/html'
 import type { CategoryDoc, ProductDoc } from '@/lib/db/product-doc'
+import { ADMIN_PRODUCT_DETAIL_PROJECTION } from '@/lib/server/brand-filter'
 import { formatMongoError } from '@/lib/mongodb'
 import { revalidateCatalogCache } from '@/lib/server/revalidate-catalog'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
+
+function descriptionForAdmin(d: ProductDoc): string {
+  const plain = (d.descriptionPlain || '').trim()
+  if (plain) return plain
+  return stripHtml(d.descriptionHtml || '')
+}
+
+export async function GET(
+  _req: Request,
+  ctx: { params: Promise<{ id: string }> },
+) {
+  const block = await requireAdmin()
+  if (block) return block
+  const { id } = await ctx.params
+  const handleId = decodeURIComponent(id || '').trim()
+  if (!handleId) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
+
+  try {
+    const db = await getAdminDb()
+    const d = await db
+      .collection<ProductDoc>(COL.products)
+      .findOne({ handleId }, { projection: ADMIN_PRODUCT_DETAIL_PROJECTION, maxTimeMS: 15_000 })
+    if (!d) return NextResponse.json({ error: 'Product not found' }, { status: 404 })
+
+    const images = d.images?.length ? d.images : d.image ? [d.image] : []
+    return NextResponse.json({
+      product: {
+        handleId: d.handleId,
+        name: d.name,
+        sku: d.sku ?? null,
+        image: images[0] || d.image || '',
+        images,
+        price: d.price ?? 0,
+        costPrice: d.costPrice ?? null,
+        quantity: d.quantity ?? null,
+        visible: d.visible !== false,
+        inStock: d.inStock !== false,
+        primaryCategory: d.primaryCategory || '',
+        brand: d.brand ?? null,
+        descriptionPlain: descriptionForAdmin(d),
+        categoryId: d.categoryId ?? null,
+        modelId: d.modelId ?? null,
+      },
+    })
+  } catch (err) {
+    console.error('[admin/products GET id]', err)
+    return NextResponse.json({ error: formatMongoError(err) }, { status: 500 })
+  }
+}
 
 async function categoryNameFor(db: Awaited<ReturnType<typeof getAdminDb>>, id: string | null | undefined): Promise<string | null> {
   if (!id) return null

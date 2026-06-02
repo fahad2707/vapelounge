@@ -5,8 +5,7 @@ import { getAdminDb } from '@/lib/admin/db'
 import { requireAdmin } from '@/lib/admin/guard'
 import { randSuffix, slugify } from '@/lib/admin/slug'
 import type { CategoryDoc, ProductDoc } from '@/lib/db/product-doc'
-import { stripHtml } from '@/lib/catalog/html'
-import { ADMIN_PRODUCT_LIST_PROJECTION } from '@/lib/server/brand-filter'
+import { ADMIN_PRODUCT_GRID_PROJECTION } from '@/lib/server/brand-filter'
 import { formatMongoError } from '@/lib/mongodb'
 import { revalidateCatalogCache } from '@/lib/server/revalidate-catalog'
 
@@ -21,12 +20,6 @@ const ADMIN_PRODUCT_SLIM_PROJECTION = {
   variantGroupId: 1,
   visible: 1,
 } as const
-
-function descriptionForAdmin(d: ProductDoc): string {
-  const plain = (d.descriptionPlain || '').trim()
-  if (plain) return plain
-  return stripHtml(d.descriptionHtml || '')
-}
 
 function parseIntSafe(v: string | null, fallback: number, min: number, max: number) {
   const n = Number.parseInt(v ?? '', 10)
@@ -54,7 +47,7 @@ export async function GET(req: Request) {
   try {
     const db = await getAdminDb()
     const col = db.collection<ProductDoc>(COL.products)
-    const projection = slim ? ADMIN_PRODUCT_SLIM_PROJECTION : ADMIN_PRODUCT_LIST_PROJECTION
+    const projection = slim ? ADMIN_PRODUCT_SLIM_PROJECTION : ADMIN_PRODUCT_GRID_PROJECTION
     const filter = q
       ? {
           $or: [
@@ -68,10 +61,10 @@ export async function GET(req: Request) {
 
     const docs = await col
       .find(filter, { projection })
-      .sort({ updatedAt: -1, name: 1 })
+      .sort({ name: 1 })
       .skip(skip)
       .limit(limit + 1)
-      .maxTimeMS(25_000)
+      .maxTimeMS(20_000)
       .toArray()
 
     const hasMore = docs.length > limit
@@ -96,14 +89,14 @@ export async function GET(req: Request) {
           sku: d.sku ?? null,
           image: images[0] || d.image || '',
           images,
-          price: d.price,
+          price: d.price ?? 0,
           costPrice: d.costPrice ?? null,
           quantity: d.quantity ?? null,
           visible: d.visible !== false,
           inStock: d.inStock !== false,
-          primaryCategory: d.primaryCategory,
+          primaryCategory: d.primaryCategory || '',
           brand: d.brand ?? null,
-          descriptionPlain: descriptionForAdmin(d),
+          descriptionPlain: '',
           categoryId: d.categoryId ?? null,
           modelId: d.modelId ?? null,
         }

@@ -1,5 +1,5 @@
 'use client'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Modal from '../_components/Modal'
 import ProductForm, { EMPTY_PRODUCT, type ProductFormValues } from '../_components/ProductForm'
 
@@ -39,9 +39,30 @@ function formatCad(n: number): string {
   return n.toLocaleString('en-CA', { style: 'currency', currency: 'CAD' })
 }
 
+async function fetchProductPage(params: { skip: number; q: string }) {
+  const sp = new URLSearchParams()
+  sp.set('limit', '60')
+  sp.set('skip', String(params.skip))
+  if (params.q.trim()) sp.set('q', params.q.trim())
+  const r = await fetch(`/api/admin/products?${sp}`, { cache: 'no-store' })
+  const j = (await r.json().catch(() => ({}))) as {
+    products?: AdminProduct[]
+    hasMore?: boolean
+    error?: string
+  }
+  if (!r.ok) {
+    throw new Error(
+      j.error ||
+        (r.status === 504 ? 'Request timed out. Refresh the page.' : 'Failed to load products.'),
+    )
+  }
+  return { products: j.products || [], hasMore: !!j.hasMore }
+}
+
 export default function ProductsClient() {
   const [products, setProducts] = useState<AdminProduct[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [loadErr, setLoadErr] = useState<string | null>(null)
   const [q, setQ] = useState('')
   const [showHidden, setShowHidden] = useState(true)
@@ -51,53 +72,78 @@ export default function ProductsClient() {
   const [submitting, setSubmitting] = useState(false)
   const [submitErr, setSubmitErr] = useState<string | null>(null)
   const [savedToast, setSavedToast] = useState<string | null>(null)
+  const [editLoading, setEditLoading] = useState(false)
 
   const [hasMore, setHasMore] = useState(false)
-  const [skip, setSkip] = useState(0)
+  const skipRef = useRef(0)
 
-  const load = useCallback(
-    async (opts?: { append?: boolean; nextSkip?: number }) => {
-      setLoading(true)
-      setLoadErr(null)
-      const useSkip = opts?.append ? (opts.nextSkip ?? skip) : 0
-      try {
-        const params = new URLSearchParams()
-        params.set('limit', '80')
-        params.set('skip', String(useSkip))
-        if (q.trim()) params.set('q', q.trim())
-        const r = await fetch(`/api/admin/products?${params}`, { cache: 'no-store' })
-        const j = (await r.json().catch(() => ({}))) as {
-          products?: AdminProduct[]
-          hasMore?: boolean
-          error?: string
-        }
-        if (!r.ok) {
-          setLoadErr(
-            j.error ||
-              (r.status === 504 ? 'Request timed out. Refresh the page.' : 'Failed to load products.'),
-          )
-          if (!opts?.append) setProducts([])
-          setHasMore(false)
-        } else {
-          const batch = j.products || []
-          setProducts(prev => (opts?.append ? [...prev, ...batch] : batch))
-          setHasMore(!!j.hasMore)
-          setSkip(useSkip + batch.length)
-        }
-      } catch {
-        setLoadErr('Network error while loading products.')
-      } finally {
-        setLoading(false)
-      }
-    },
-    [q, skip],
-  )
+  const reloadList = useCallback(async () => {
+    setLoading(true)
+    setLoadErr(null)
+    skipRef.current = 0
+    try {
+      const { products: batch, hasMore: more } = await fetchProductPage({ skip: 0, q })
+      setProducts(batch)
+      setHasMore(more)
+      skipRef.current = batch.length
+    } catch (e) {
+      setLoadErr(e instanceof Error ? e.message : 'Failed to load products.')
+      setProducts([])
+      setHasMore(false)
+    } finally {
+      setLoading(false)
+    }
+  }, [q])
 
   useEffect(() => {
-    setSkip(0)
-    const t = window.setTimeout(() => void load({ append: false, nextSkip: 0 }), q.trim() ? 280 : 0)
-    return () => window.clearTimeout(t)
+    let cancelled = false
+    const timer = window.setTimeout(
+      () => {
+        void (async () => {
+          setLoading(true)
+          setLoadErr(null)
+          skipRef.current = 0
+          try {
+            const { products: batch, hasMore: more } = await fetchProductPage({ skip: 0, q })
+            if (cancelled) return
+            setProducts(batch)
+            setHasMore(more)
+            skipRef.current = batch.length
+          } catch (e) {
+            if (cancelled) return
+            setLoadErr(e instanceof Error ? e.message : 'Failed to load products.')
+            setProducts([])
+            setHasMore(false)
+          } finally {
+            if (!cancelled) setLoading(false)
+          }
+        })()
+      },
+      q.trim() ? 280 : 0,
+    )
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
   }, [q])
+
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore) return
+    setLoadingMore(true)
+    try {
+      const { products: batch, hasMore: more } = await fetchProductPage({
+        skip: skipRef.current,
+        q,
+      })
+      setProducts(prev => [...prev, ...batch])
+      setHasMore(more)
+      skipRef.current += batch.length
+    } catch (e) {
+      setLoadErr(e instanceof Error ? e.message : 'Failed to load more products.')
+    } finally {
+      setLoadingMore(false)
+    }
+  }, [hasMore, loadingMore, q])
 
   const filtered = useMemo(() => {
     return products.filter(p => showHidden || p.visible)
@@ -105,7 +151,7 @@ export default function ProductsClient() {
 
   const toggleHidden = useCallback(async (p: AdminProduct) => {
     const next = !p.visible
-    setProducts(list => list.map(x => x.handleId === p.handleId ? { ...x, visible: next } : x))
+    setProducts(list => list.map(x => (x.handleId === p.handleId ? { ...x, visible: next } : x)))
     try {
       const r = await fetch(`/api/admin/products/${encodeURIComponent(p.handleId)}`, {
         method: 'PATCH',
@@ -116,7 +162,7 @@ export default function ProductsClient() {
       setSavedToast(next ? `${p.name} is now visible` : `${p.name} hidden`)
       window.setTimeout(() => setSavedToast(null), 2200)
     } catch {
-      setProducts(list => list.map(x => x.handleId === p.handleId ? { ...x, visible: p.visible } : x))
+      setProducts(list => list.map(x => (x.handleId === p.handleId ? { ...x, visible: p.visible } : x)))
       setLoadErr('Could not update visibility. Please try again.')
     }
   }, [])
@@ -143,11 +189,28 @@ export default function ProductsClient() {
     setModalOpen(true)
   }, [])
 
-  const openEdit = useCallback((p: AdminProduct) => {
+  const openEdit = useCallback(async (p: AdminProduct) => {
     setEditingId(p.handleId)
     setForm(productToForm(p))
     setSubmitErr(null)
+    setEditLoading(true)
     setModalOpen(true)
+    try {
+      const r = await fetch(`/api/admin/products/${encodeURIComponent(p.handleId)}`, {
+        cache: 'no-store',
+      })
+      const j = (await r.json().catch(() => ({}))) as { product?: AdminProduct; error?: string }
+      if (r.ok && j.product) {
+        setForm(productToForm(j.product))
+        setProducts(list =>
+          list.map(x => (x.handleId === p.handleId ? { ...x, ...j.product! } : x)),
+        )
+      }
+    } catch {
+      /* keep list row data in form */
+    } finally {
+      setEditLoading(false)
+    }
   }, [])
 
   const submit = useCallback(async () => {
@@ -185,13 +248,13 @@ export default function ProductsClient() {
       setModalOpen(false)
       setForm(EMPTY_PRODUCT)
       setEditingId(null)
-      void load()
+      await reloadList()
     } catch {
       setSubmitErr('Network error.')
     } finally {
       setSubmitting(false)
     }
-  }, [editingId, form, load])
+  }, [editingId, form, reloadList])
 
   const visibleCount = products.filter(p => p.visible).length
   const hiddenCount = products.length - visibleCount
@@ -204,7 +267,7 @@ export default function ProductsClient() {
           <div className="adm-page-sub">
             {loading
               ? 'Loading catalogue…'
-              : `${products.length} total · ${visibleCount} visible · ${hiddenCount} hidden`}
+              : `${products.length} loaded · ${visibleCount} visible · ${hiddenCount} hidden`}
           </div>
         </div>
         <button type="button" className="adm-btn adm-btn-primary" onClick={openAdd}>
@@ -240,9 +303,10 @@ export default function ProductsClient() {
           <button
             type="button"
             className="adm-btn adm-btn-ghost"
-            onClick={() => void load({ append: true })}
+            disabled={loadingMore}
+            onClick={() => void loadMore()}
           >
-            Load more products →
+            {loadingMore ? 'Loading…' : 'Load more products →'}
           </button>
         </div>
       )}
@@ -274,7 +338,7 @@ export default function ProductsClient() {
               <button
                 type="button"
                 className="adm-btn adm-btn-ghost adm-btn-sm"
-                onClick={() => openEdit(p)}
+                onClick={() => void openEdit(p)}
               >
                 Edit
               </button>
@@ -317,6 +381,9 @@ export default function ProductsClient() {
           title={editingId ? 'Edit product' : 'Add product'}
           onClose={() => !submitting && setModalOpen(false)}
         >
+          {editLoading ? (
+            <p style={{ color: '#64748B', fontSize: 14 }}>Loading product details…</p>
+          ) : null}
           <ProductForm
             value={form}
             onChange={setForm}
