@@ -8,6 +8,52 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
+export interface MongoConnectionInfo {
+  configured: boolean
+  host: string | null
+  isAtlas: boolean
+  isDirectIp: boolean
+  dbName: string
+}
+
+/** Safe summary of MONGODB_URI for logs and admin diagnostics (no credentials). */
+export function getMongoConnectionInfo(): MongoConnectionInfo {
+  const uri = process.env.MONGODB_URI?.trim()
+  const dbName = getDbName()
+  if (!uri) {
+    return { configured: false, host: null, isAtlas: false, isDirectIp: false, dbName }
+  }
+
+  try {
+    if (uri.startsWith('mongodb+srv://')) {
+      const host = uri.match(/@([^/?]+)/)?.[1] ?? null
+      return {
+        configured: true,
+        host,
+        isAtlas: !!host?.includes('.mongodb.net'),
+        isDirectIp: false,
+        dbName,
+      }
+    }
+
+    const withoutScheme = uri.replace(/^mongodb:\/\//, '')
+    const hostPart = withoutScheme.includes('@')
+      ? withoutScheme.split('@').pop()!
+      : withoutScheme
+    const host = hostPart.split('/')[0]?.split(':')[0] ?? null
+    const isDirectIp = !!host && /^\d{1,3}(\.\d{1,3}){3}$/.test(host)
+    return {
+      configured: true,
+      host,
+      isAtlas: !!host?.includes('.mongodb.net'),
+      isDirectIp,
+      dbName,
+    }
+  } catch {
+    return { configured: true, host: '(unparseable)', isAtlas: false, isDirectIp: false, dbName }
+  }
+}
+
 export function isMongoConnectionError(err: unknown): boolean {
   if (!err || typeof err !== 'object') return false
   const msg = String((err as Error).message || '')
@@ -21,14 +67,36 @@ export function isMongoConnectionError(err: unknown): boolean {
 
 /** User-facing message for admin API responses. */
 export function formatMongoError(err: unknown): string {
-  if (isMongoConnectionError(err)) {
+  if (!isMongoConnectionError(err)) {
+    return (err as Error)?.message || 'Database error'
+  }
+
+  const info = getMongoConnectionInfo()
+
+  if (!info.configured) {
+    return 'MONGODB_URI is not set on the server. Add it in Vercel → Settings → Environment Variables, then redeploy.'
+  }
+
+  if (info.isDirectIp && info.host) {
     return (
-      'Database connection timed out. Wait a few seconds and try again. ' +
-      'If this keeps happening, confirm MongoDB is running and that your server IP is allowed ' +
-      '(Atlas Network Access or firewall on your database host).'
+      `Database connection timed out to ${info.host}. ` +
+      'That is a direct IP host, not MongoDB Atlas — Atlas Network Access will not help. ' +
+      'Either open firewall port 27017 for your app host, or change MONGODB_URI on Vercel to your Atlas string (mongodb+srv://….mongodb.net/…).'
     )
   }
-  return (err as Error)?.message || 'Database error'
+
+  if (info.isAtlas && info.host) {
+    return (
+      `Database connection timed out (Atlas: ${info.host}). ` +
+      'In Atlas, confirm the cluster is not paused, the database user password in Vercel matches Database Access, ' +
+      'and Network Access allows 0.0.0.0/0. Then redeploy after saving MONGODB_URI.'
+    )
+  }
+
+  return (
+    `Database connection timed out${info.host ? ` (${info.host})` : ''}. ` +
+    'Check MONGODB_URI on Vercel matches your Atlas connection string and redeploy.'
+  )
 }
 
 /** Drop cached client so the next request opens a fresh connection (stale pool on serverless). */
@@ -40,26 +108,20 @@ export function resetMongoClient(): void {
   }
 }
 
-/**
- * Cached MongoDB client for serverless (Vercel): reuses the connection promise
- * across invocations when possible.
- */
 function getMongoClientPromise(): Promise<MongoClient> | null {
   const uri = process.env.MONGODB_URI
   if (!uri?.trim()) return null
 
   if (!globalForMongo.mongoClientPromise) {
     const client = new MongoClient(uri, {
-      // Small pool — each serverless instance should not hoard connections.
       maxPoolSize: 1,
       minPoolSize: 0,
       maxIdleTimeMS: 30_000,
-      waitQueueTimeoutMS: 20_000,
-      serverSelectionTimeoutMS: 20_000,
-      connectTimeoutMS: 20_000,
-      socketTimeoutMS: 60_000,
+      waitQueueTimeoutMS: 15_000,
+      serverSelectionTimeoutMS: 12_000,
+      connectTimeoutMS: 12_000,
+      socketTimeoutMS: 45_000,
       heartbeatFrequencyMS: 10_000,
-      compressors: ['zlib'],
     })
     globalForMongo.mongoClientPromise = client.connect().catch(err => {
       globalForMongo.mongoClientPromise = undefined
@@ -73,20 +135,20 @@ function getMongoClientPromise(): Promise<MongoClient> | null {
 export async function connectMongo(): Promise<MongoClient | null> {
   if (!process.env.MONGODB_URI?.trim()) return null
 
-  const maxAttempts = 3
+  const maxAttempts = 2
   let lastErr: unknown
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     if (attempt > 0) {
       resetMongoClient()
-      await sleep(400 * attempt)
+      await sleep(600)
     }
 
     try {
       const promise = getMongoClientPromise()
       if (!promise) return null
       const client = await promise
-      await client.db(getDbName()).command({ ping: 1 }, { timeoutMS: 12_000 })
+      await client.db(getDbName()).command({ ping: 1 }, { timeoutMS: 10_000 })
       return client
     } catch (err) {
       lastErr = err

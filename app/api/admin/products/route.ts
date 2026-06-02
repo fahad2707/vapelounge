@@ -10,6 +10,9 @@ import { ADMIN_PRODUCT_LIST_PROJECTION } from '@/lib/server/brand-filter'
 import { formatMongoError } from '@/lib/mongodb'
 import { revalidateCatalogCache } from '@/lib/server/revalidate-catalog'
 
+export const dynamic = 'force-dynamic'
+export const maxDuration = 60
+
 function descriptionForAdmin(d: ProductDoc): string {
   const plain = (d.descriptionPlain || '').trim()
   if (plain) return plain

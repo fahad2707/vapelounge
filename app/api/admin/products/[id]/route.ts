@@ -7,6 +7,9 @@ import type { CategoryDoc, ProductDoc } from '@/lib/db/product-doc'
 import { formatMongoError } from '@/lib/mongodb'
 import { revalidateCatalogCache } from '@/lib/server/revalidate-catalog'
 
+export const dynamic = 'force-dynamic'
+export const maxDuration = 60
+
 async function categoryNameFor(db: Awaited<ReturnType<typeof getAdminDb>>, id: string | null | undefined): Promise<string | null> {
   if (!id) return null
   let oid: ObjectId
