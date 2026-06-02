@@ -6,6 +6,7 @@ import { requireAdmin } from '@/lib/admin/guard'
 import { randSuffix, slugify } from '@/lib/admin/slug'
 import type { CategoryDoc, ProductDoc } from '@/lib/db/product-doc'
 import {
+  ADMIN_PRODUCTS_PAGE_SIZE,
   cacheKeyForGrid,
   clearAdminProductsCache,
   getCachedAdminProducts,
@@ -46,9 +47,15 @@ export async function GET(req: Request) {
   if (block) return block
   const { searchParams } = new URL(req.url)
   const slim = searchParams.get('slim') === '1'
-  const limit = parseIntSafe(searchParams.get('limit'), slim ? 500 : 36, 12, slim ? 1000 : 100)
+  const limit = parseIntSafe(
+    searchParams.get('limit'),
+    slim ? 500 : ADMIN_PRODUCTS_PAGE_SIZE,
+    20,
+    slim ? 1000 : 500,
+  )
   const skip = parseIntSafe(searchParams.get('skip'), 0, 0, 50_000)
   const q = searchParams.get('q')?.trim() || ''
+  const includeTotal = searchParams.get('total') === '1'
 
   try {
     if (slim) {
@@ -65,10 +72,10 @@ export async function GET(req: Request) {
         : {}
       const docs = await col
         .find(filter, { projection: ADMIN_PRODUCT_SLIM_PROJECTION })
-        .sort({ name: 1 })
+        .sort(q ? { name: 1 } : { _id: -1 })
         .skip(skip)
         .limit(limit + 1)
-        .maxTimeMS(8_000)
+        .maxTimeMS(12_000)
         .toArray()
       const hasMore = docs.length > limit
       const page = hasMore ? docs.slice(0, limit) : docs
@@ -94,7 +101,7 @@ export async function GET(req: Request) {
     }
 
     const db = await getAdminDb()
-    const result = await listAdminProductsForGrid(db, { skip, limit, q })
+    const result = await listAdminProductsForGrid(db, { skip, limit, q, includeTotal })
     setCachedAdminProducts(cacheKey, result)
     return NextResponse.json(result)
   } catch (err) {

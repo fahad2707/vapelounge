@@ -3,7 +3,7 @@ import { COL } from '@/lib/db/collections'
 import type { ProductDoc } from '@/lib/db/product-doc'
 import { escapeRegex } from '@/lib/server/brand-filter'
 
-/** Smallest useful fields for the admin product grid (fast over slow Atlas links). */
+/** Admin grid fields only — descriptions load on edit. */
 export const ADMIN_PRODUCT_MIN_PROJECTION = {
   handleId: 1,
   name: 1,
@@ -17,6 +17,7 @@ export const ADMIN_PRODUCT_MIN_PROJECTION = {
   inStock: 1,
   categoryId: 1,
   modelId: 1,
+  costPrice: 1,
 } as const
 
 export interface AdminProductGridRow {
@@ -42,7 +43,10 @@ export interface AdminProductGridResult {
   hasMore: boolean
   limit: number
   skip: number
+  total?: number
 }
+
+export const ADMIN_PRODUCTS_PAGE_SIZE = 120
 
 function mapDoc(d: ProductDoc): AdminProductGridRow {
   const image = d.image || ''
@@ -53,7 +57,7 @@ function mapDoc(d: ProductDoc): AdminProductGridRow {
     image,
     images: image ? [image] : [],
     price: d.price ?? 0,
-    costPrice: null,
+    costPrice: d.costPrice ?? null,
     quantity: d.quantity ?? null,
     visible: d.visible !== false,
     inStock: d.inStock !== false,
@@ -74,22 +78,36 @@ function buildFilter(q: string) {
   }
 }
 
+/** Newest first — uses default _id index (fast). Avoids slow updatedAt sort on 800+ docs. */
+function listSort(q: string): Record<string, 1 | -1> {
+  if (q.trim()) return { name: 1 }
+  return { _id: -1 }
+}
+
 export async function listAdminProductsForGrid(
   db: Db,
-  opts: { skip?: number; limit?: number; q?: string },
+  opts: { skip?: number; limit?: number; q?: string; includeTotal?: boolean },
 ): Promise<AdminProductGridResult> {
   const skip = Math.max(0, opts.skip ?? 0)
-  const limit = Math.min(100, Math.max(12, opts.limit ?? 36))
+  const limit = Math.min(500, Math.max(20, opts.limit ?? ADMIN_PRODUCTS_PAGE_SIZE))
   const q = opts.q ?? ''
+  const filter = buildFilter(q)
+  const sort = listSort(q)
 
   const col = db.collection<ProductDoc>(COL.products)
-  const docs = await col
-    .find(buildFilter(q), { projection: ADMIN_PRODUCT_MIN_PROJECTION })
-    .sort({ name: 1 })
-    .skip(skip)
-    .limit(limit + 1)
-    .maxTimeMS(8_000)
-    .toArray()
+
+  const [docs, total] = await Promise.all([
+    col
+      .find(filter, { projection: ADMIN_PRODUCT_MIN_PROJECTION })
+      .sort(sort)
+      .skip(skip)
+      .limit(limit + 1)
+      .maxTimeMS(12_000)
+      .toArray(),
+    opts.includeTotal && !q.trim()
+      ? col.estimatedDocumentCount()
+      : Promise.resolve(undefined),
+  ])
 
   const hasMore = docs.length > limit
   const page = hasMore ? docs.slice(0, limit) : docs
@@ -99,6 +117,7 @@ export async function listAdminProductsForGrid(
     hasMore,
     limit,
     skip,
+    total,
   }
 }
 
@@ -106,7 +125,7 @@ const globalCache = globalThis as unknown as {
   vlAdminProductsCache?: Map<string, { at: number; data: AdminProductGridResult }>
 }
 
-const CACHE_TTL_MS = 45_000
+const CACHE_TTL_MS = 20_000
 
 export function getCachedAdminProducts(key: string): AdminProductGridResult | null {
   const map = globalCache.vlAdminProductsCache
@@ -124,7 +143,7 @@ export function setCachedAdminProducts(key: string, data: AdminProductGridResult
     globalCache.vlAdminProductsCache = new Map()
   }
   globalCache.vlAdminProductsCache.set(key, { at: Date.now(), data })
-  if (globalCache.vlAdminProductsCache.size > 40) {
+  if (globalCache.vlAdminProductsCache.size > 24) {
     const oldest = globalCache.vlAdminProductsCache.keys().next().value
     if (oldest) globalCache.vlAdminProductsCache.delete(oldest)
   }

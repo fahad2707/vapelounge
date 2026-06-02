@@ -3,6 +3,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Modal from '../_components/Modal'
 import ProductForm, { EMPTY_PRODUCT, type ProductFormValues } from '../_components/ProductForm'
 
+const PAGE_SIZE = 120
+
 interface AdminProduct {
   handleId: string
   name: string
@@ -41,40 +43,38 @@ function formatCad(n: number): string {
 
 async function fetchProductPage(params: { skip: number; q: string }) {
   const sp = new URLSearchParams()
-  sp.set('limit', '36')
+  sp.set('limit', String(PAGE_SIZE))
   sp.set('skip', String(params.skip))
+  if (params.skip === 0) sp.set('total', '1')
   if (params.q.trim()) sp.set('q', params.q.trim())
   const r = await fetch(`/api/admin/products?${sp}`, { cache: 'no-store' })
   const j = (await r.json().catch(() => ({}))) as {
     products?: AdminProduct[]
     hasMore?: boolean
+    total?: number
     error?: string
   }
   if (!r.ok) {
     throw new Error(
       j.error ||
-        (r.status === 504 ? 'Request timed out. Refresh the page.' : 'Failed to load products.'),
+        (r.status === 504 ? 'Request timed out. Click Retry.' : 'Failed to load products.'),
     )
   }
-  return { products: j.products || [], hasMore: !!j.hasMore }
+  return {
+    products: j.products || [],
+    hasMore: !!j.hasMore,
+    total: j.total,
+  }
 }
 
-export default function ProductsClient({
-  initialProducts = [],
-  initialHasMore = false,
-  initialError = null,
-}: {
-  initialProducts?: AdminProduct[]
-  initialHasMore?: boolean
-  initialError?: string | null
-}) {
-  const skipFirstFetch = useRef(initialProducts.length > 0)
-  const [products, setProducts] = useState<AdminProduct[]>(initialProducts)
-  const [loading, setLoading] = useState(initialProducts.length === 0 && !initialError)
+export default function ProductsClient() {
+  const [products, setProducts] = useState<AdminProduct[]>([])
+  const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
-  const [loadErr, setLoadErr] = useState<string | null>(initialError)
+  const [loadErr, setLoadErr] = useState<string | null>(null)
   const [q, setQ] = useState('')
   const [showHidden, setShowHidden] = useState(true)
+  const [totalCount, setTotalCount] = useState<number | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<ProductFormValues>(EMPTY_PRODUCT)
@@ -82,81 +82,41 @@ export default function ProductsClient({
   const [submitErr, setSubmitErr] = useState<string | null>(null)
   const [savedToast, setSavedToast] = useState<string | null>(null)
   const [editLoading, setEditLoading] = useState(false)
+  const [hasMore, setHasMore] = useState(false)
+  const skipRef = useRef(0)
 
-  const [hasMore, setHasMore] = useState(initialHasMore)
-  const skipRef = useRef(initialProducts.length)
+  const load = useCallback(async (opts?: { append?: boolean }) => {
+    const append = opts?.append ?? false
+    if (append) setLoadingMore(true)
+    else {
+      setLoading(true)
+      setLoadErr(null)
+      skipRef.current = 0
+    }
 
-  const reloadList = useCallback(async () => {
-    setLoading(true)
-    setLoadErr(null)
-    skipRef.current = 0
     try {
-      const { products: batch, hasMore: more } = await fetchProductPage({ skip: 0, q })
-      setProducts(batch)
+      const { products: batch, hasMore: more, total } = await fetchProductPage({
+        skip: append ? skipRef.current : 0,
+        q,
+      })
+      setProducts(prev => (append ? [...prev, ...batch] : batch))
       setHasMore(more)
-      skipRef.current = batch.length
+      skipRef.current = (append ? skipRef.current : 0) + batch.length
+      if (total != null) setTotalCount(total)
     } catch (e) {
       setLoadErr(e instanceof Error ? e.message : 'Failed to load products.')
-      setProducts([])
+      if (!append) setProducts([])
       setHasMore(false)
     } finally {
-      setLoading(false)
+      if (append) setLoadingMore(false)
+      else setLoading(false)
     }
   }, [q])
 
   useEffect(() => {
-    if (skipFirstFetch.current && !q.trim()) {
-      skipFirstFetch.current = false
-      return
-    }
-    let cancelled = false
-    const timer = window.setTimeout(
-      () => {
-        void (async () => {
-          setLoading(true)
-          setLoadErr(null)
-          skipRef.current = 0
-          try {
-            const { products: batch, hasMore: more } = await fetchProductPage({ skip: 0, q })
-            if (cancelled) return
-            setProducts(batch)
-            setHasMore(more)
-            skipRef.current = batch.length
-          } catch (e) {
-            if (cancelled) return
-            setLoadErr(e instanceof Error ? e.message : 'Failed to load products.')
-            setProducts([])
-            setHasMore(false)
-          } finally {
-            if (!cancelled) setLoading(false)
-          }
-        })()
-      },
-      q.trim() ? 280 : 0,
-    )
-    return () => {
-      cancelled = true
-      window.clearTimeout(timer)
-    }
-  }, [q])
-
-  const loadMore = useCallback(async () => {
-    if (loadingMore || !hasMore) return
-    setLoadingMore(true)
-    try {
-      const { products: batch, hasMore: more } = await fetchProductPage({
-        skip: skipRef.current,
-        q,
-      })
-      setProducts(prev => [...prev, ...batch])
-      setHasMore(more)
-      skipRef.current += batch.length
-    } catch (e) {
-      setLoadErr(e instanceof Error ? e.message : 'Failed to load more products.')
-    } finally {
-      setLoadingMore(false)
-    }
-  }, [hasMore, loadingMore, q])
+    const t = window.setTimeout(() => void load(), q.trim() ? 250 : 0)
+    return () => window.clearTimeout(t)
+  }, [q, load])
 
   const filtered = useMemo(() => {
     return products.filter(p => showHidden || p.visible)
@@ -189,11 +149,12 @@ export default function ProductsClient({
       if (!r.ok) throw new Error()
       setSavedToast(`${p.name} deleted`)
       window.setTimeout(() => setSavedToast(null), 2200)
+      if (totalCount != null) setTotalCount(totalCount - 1)
     } catch {
       setProducts(prev)
       setLoadErr('Could not delete. Please try again.')
     }
-  }, [products])
+  }, [products, totalCount])
 
   const openAdd = useCallback(() => {
     setEditingId(null)
@@ -213,14 +174,9 @@ export default function ProductsClient({
         cache: 'no-store',
       })
       const j = (await r.json().catch(() => ({}))) as { product?: AdminProduct; error?: string }
-      if (r.ok && j.product) {
-        setForm(productToForm(j.product))
-        setProducts(list =>
-          list.map(x => (x.handleId === p.handleId ? { ...x, ...j.product! } : x)),
-        )
-      }
+      if (r.ok && j.product) setForm(productToForm(j.product))
     } catch {
-      /* keep list row data in form */
+      /* keep row data */
     } finally {
       setEditLoading(false)
     }
@@ -253,7 +209,6 @@ export default function ProductsClient({
       const j = (await r.json().catch(() => ({}))) as { error?: string }
       if (!r.ok) {
         setSubmitErr(j.error || 'Could not save the product.')
-        setSubmitting(false)
         return
       }
       setSavedToast(editingId ? 'Changes saved' : 'Product added')
@@ -261,13 +216,13 @@ export default function ProductsClient({
       setModalOpen(false)
       setForm(EMPTY_PRODUCT)
       setEditingId(null)
-      await reloadList()
+      await load()
     } catch {
       setSubmitErr('Network error.')
     } finally {
       setSubmitting(false)
     }
-  }, [editingId, form, reloadList])
+  }, [editingId, form, load])
 
   const visibleCount = products.filter(p => p.visible).length
   const hiddenCount = products.length - visibleCount
@@ -279,8 +234,10 @@ export default function ProductsClient({
           <div className="adm-page-title">Products</div>
           <div className="adm-page-sub">
             {loading
-              ? 'Loading catalogue…'
-              : `${products.length} loaded · ${visibleCount} visible · ${hiddenCount} hidden`}
+              ? 'Loading products…'
+              : totalCount != null
+                ? `${products.length} shown · ${totalCount} in catalogue · ${visibleCount} visible`
+                : `${products.length} loaded · ${visibleCount} visible · ${hiddenCount} hidden`}
           </div>
         </div>
         <button type="button" className="adm-btn adm-btn-primary" onClick={openAdd}>
@@ -304,7 +261,7 @@ export default function ProductsClient({
       {loadErr && (
         <div className="adm-error" style={{ marginBottom: 14, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <span>{loadErr}</span>
-          <button type="button" className="adm-btn adm-btn-ghost adm-btn-sm" onClick={() => void reloadList()}>
+          <button type="button" className="adm-btn adm-btn-ghost adm-btn-sm" onClick={() => void load()}>
             Retry
           </button>
         </div>
@@ -324,62 +281,63 @@ export default function ProductsClient({
             type="button"
             className="adm-btn adm-btn-ghost"
             disabled={loadingMore}
-            onClick={() => void loadMore()}
+            onClick={() => void load({ append: true })}
           >
-            {loadingMore ? 'Loading…' : 'Load more products →'}
+            {loadingMore ? 'Loading…' : `Load next ${PAGE_SIZE} (newest first)`}
           </button>
         </div>
       )}
 
       <div className="adm-prod-grid">
-        {filtered.map(p => (
-          <div key={p.handleId} className={`adm-prod-card${p.visible ? '' : ' hidden'}`}>
-            <div className="adm-prod-img">
-              {p.image
-                /* eslint-disable-next-line @next/next/no-img-element */
-                ? <img src={p.image} alt={p.name} />
-                : <div className="adm-prod-img-empty">💨</div>}
-            </div>
-            <div className="adm-prod-meta">
-              <div className="adm-prod-name">{p.name}</div>
-              <div className="adm-prod-sku">SKU: {p.sku || '—'}</div>
-              <div className="adm-prod-row">
-                <span className="adm-prod-price">{formatCad(p.price)}</span>
-                <span className={`adm-pill ${p.visible ? 'visible' : 'hidden'}`}>
-                  {p.visible ? 'Visible' : 'Hidden'}
-                </span>
+        {!loading &&
+          filtered.map(p => (
+            <div key={p.handleId} className={`adm-prod-card${p.visible ? '' : ' hidden'}`}>
+              <div className="adm-prod-img">
+                {p.image
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  ? <img src={p.image} alt={p.name} loading="lazy" />
+                  : <div className="adm-prod-img-empty">💨</div>}
               </div>
-              <div style={{ fontSize: 11.5, color: '#64748B' }}>
-                {p.brand || p.primaryCategory || '—'}
-                {p.quantity != null ? ` · Qty: ${p.quantity}` : ''}
+              <div className="adm-prod-meta">
+                <div className="adm-prod-name">{p.name}</div>
+                <div className="adm-prod-sku">SKU: {p.sku || '—'}</div>
+                <div className="adm-prod-row">
+                  <span className="adm-prod-price">{formatCad(p.price)}</span>
+                  <span className={`adm-pill ${p.visible ? 'visible' : 'hidden'}`}>
+                    {p.visible ? 'Visible' : 'Hidden'}
+                  </span>
+                </div>
+                <div style={{ fontSize: 11.5, color: '#64748B' }}>
+                  {p.brand || p.primaryCategory || '—'}
+                  {p.quantity != null ? ` · Qty: ${p.quantity}` : ''}
+                </div>
+              </div>
+              <div className="adm-prod-actions">
+                <button
+                  type="button"
+                  className="adm-btn adm-btn-ghost adm-btn-sm"
+                  onClick={() => void openEdit(p)}
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  className={p.visible ? 'adm-btn adm-btn-ghost adm-btn-sm' : 'adm-btn adm-btn-primary adm-btn-sm'}
+                  onClick={() => toggleHidden(p)}
+                >
+                  {p.visible ? 'Hide' : 'Unhide'}
+                </button>
+                <button
+                  type="button"
+                  className="adm-btn adm-btn-danger adm-btn-sm"
+                  onClick={() => removeProduct(p)}
+                  aria-label={`Delete ${p.name}`}
+                >
+                  Delete
+                </button>
               </div>
             </div>
-            <div className="adm-prod-actions">
-              <button
-                type="button"
-                className="adm-btn adm-btn-ghost adm-btn-sm"
-                onClick={() => void openEdit(p)}
-              >
-                Edit
-              </button>
-              <button
-                type="button"
-                className={p.visible ? 'adm-btn adm-btn-ghost adm-btn-sm' : 'adm-btn adm-btn-primary adm-btn-sm'}
-                onClick={() => toggleHidden(p)}
-              >
-                {p.visible ? 'Hide' : 'Unhide'}
-              </button>
-              <button
-                type="button"
-                className="adm-btn adm-btn-danger adm-btn-sm"
-                onClick={() => removeProduct(p)}
-                aria-label={`Delete ${p.name}`}
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        ))}
+          ))}
       </div>
 
       {savedToast && (
