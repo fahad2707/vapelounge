@@ -30,7 +30,7 @@ export default function CategoryDetailClient({ categoryId }: { categoryId: strin
       const [c, m, p] = await Promise.all([
         fetch(`/api/admin/categories/${categoryId}`, { cache: 'no-store' }).then(r => r.json()),
         fetch('/api/admin/models', { cache: 'no-store' }).then(r => r.json()),
-        fetch('/api/admin/products', { cache: 'no-store' }).then(r => r.json()),
+        fetch('/api/admin/products?limit=1500', { cache: 'no-store' }).then(r => r.json()),
       ])
       if (c?.category) setCategory(c.category)
       else { setErr(c?.error || 'Category not found.') }

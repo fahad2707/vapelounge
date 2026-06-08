@@ -51,7 +51,7 @@ export async function GET(req: Request) {
     searchParams.get('limit'),
     slim ? 500 : ADMIN_PRODUCTS_PAGE_SIZE,
     20,
-    slim ? 1000 : 500,
+    slim ? 1000 : 1500,
   )
   const skip = parseIntSafe(searchParams.get('skip'), 0, 0, 50_000)
   const q = searchParams.get('q')?.trim() || ''
