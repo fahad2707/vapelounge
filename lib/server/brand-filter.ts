@@ -56,8 +56,20 @@ export function buildCategoryProductFilter(catId: string, catName: string): Filt
 export const PRODUCT_LIST_PROJECTION = {
   handleId: 1,
   name: 1,
-  image: 1,
-  images: 1,
+  image: {
+    $cond: {
+      if: { $eq: [{ $substrCP: [{ $ifNull: ["$image", ""] }, 0, 5] }, "data:"] },
+      then: "",
+      else: "$image"
+    }
+  },
+  images: {
+    $cond: {
+      if: { $eq: [{ $substrCP: [{ $ifNull: ["$image", ""] }, 0, 5] }, "data:"] },
+      then: [],
+      else: "$images"
+    }
+  },
   primaryCategory: 1,
   categories: 1,
   price: 1,
@@ -69,10 +81,39 @@ export const PRODUCT_LIST_PROJECTION = {
   accentColor: 1,
   categoryId: 1,
   modelId: 1,
-} as const
+} as any
 
 /** Admin product grid — no descriptions (loaded on edit via GET /api/admin/products/:id). */
 export const ADMIN_PRODUCT_GRID_PROJECTION = {
+  handleId: 1,
+  name: 1,
+  image: {
+    $cond: {
+      if: { $eq: [{ $substrCP: [{ $ifNull: ["$image", ""] }, 0, 5] }, "data:"] },
+      then: "",
+      else: "$image"
+    }
+  },
+  images: {
+    $cond: {
+      if: { $eq: [{ $substrCP: [{ $ifNull: ["$image", ""] }, 0, 5] }, "data:"] },
+      then: [],
+      else: "$images"
+    }
+  },
+  primaryCategory: 1,
+  price: 1,
+  costPrice: 1,
+  quantity: 1,
+  inStock: 1,
+  sku: 1,
+  brand: 1,
+  visible: 1,
+  categoryId: 1,
+  modelId: 1,
+} as any
+
+export const ADMIN_PRODUCT_DETAIL_PROJECTION = {
   handleId: 1,
   name: 1,
   image: 1,
@@ -87,10 +128,6 @@ export const ADMIN_PRODUCT_GRID_PROJECTION = {
   visible: 1,
   categoryId: 1,
   modelId: 1,
-} as const
-
-export const ADMIN_PRODUCT_DETAIL_PROJECTION = {
-  ...ADMIN_PRODUCT_GRID_PROJECTION,
   descriptionPlain: 1,
   descriptionHtml: 1,
 } as const
