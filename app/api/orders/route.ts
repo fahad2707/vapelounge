@@ -24,7 +24,7 @@ async function sendAdminOrderEmail(order: any, origin: string) {
     .join('')
 
   const emailBody = {
-    from: 'Vape Lounge <onboarding@resend.dev>',
+    from: process.env.RESEND_FROM_EMAIL || 'Vape Lounge <onboarding@resend.dev>',
     to: adminEmail,
     subject: `🚨 New Order Received! ($${order.total.toFixed(2)})`,
     html: `
