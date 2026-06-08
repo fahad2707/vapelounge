@@ -4,9 +4,13 @@ import Image from 'next/image'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 const ROTATE_MS = 3500
-const SLIDE_COUNT = 3
+const SLIDE_COUNT = 4
 
 const SLIDES = [
+  {
+    src: '/hero/rewards-banner.png',
+    alt: 'Vape Lounge Rewards Program — Join and earn 250 points',
+  },
   {
     src: '/hero/flavour-drop.png',
     alt: 'Flavour Drop — premium e-liquid, just arrived',

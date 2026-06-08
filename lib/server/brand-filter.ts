@@ -40,7 +40,21 @@ export function buildVisibleBrandFilter(brand: string | null | undefined): Filte
 }
 
 /** Match products for an admin category name (case-insensitive). */
-export function buildCategoryProductFilter(catId: string, catName: string): Filter<ProductDoc> {
+export function buildCategoryProductFilter(
+  catId: string,
+  catName: string,
+  matchType?: 'brand' | 'products',
+): Filter<ProductDoc> {
+  if (matchType === 'products') {
+    return {
+      ...SHOP_VISIBLE,
+      $or: [
+        { categoryId: catId },
+        { categories: catName },
+      ],
+    }
+  }
+
   const re = new RegExp(`^${escapeRegex(catName.trim())}$`, 'i')
   return {
     ...SHOP_VISIBLE,

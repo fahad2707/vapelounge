@@ -50,6 +50,7 @@ export async function GET(req: Request) {
         shopDisplayOrder: d.shopDisplayOrder ?? 999,
         headerPageId: d.headerPageId ?? null,
         navOrder: d.navOrder ?? 999,
+        matchType: d.matchType || 'brand',
         productCount: counts[id] ?? 0,
       }
     })
@@ -69,6 +70,7 @@ export async function POST(req: Request) {
     image?: string | null
     featured?: boolean
     shopDisplay?: boolean
+    matchType?: 'brand' | 'products'
   } = {}
   try {
     body = (await req.json()) as typeof body
@@ -118,13 +120,14 @@ export async function POST(req: Request) {
       shopDisplay,
       shopDisplayOrder,
       navOrder: 999,
+      matchType: body.matchType === 'products' ? 'products' : 'brand',
       createdAt: now,
       updatedAt: now,
     })
     revalidateCatalogCache()
     return NextResponse.json({
       ok: true,
-      category: { id: r.insertedId.toString(), slug, name, image, featured, shopDisplay },
+      category: { id: r.insertedId.toString(), slug, name, image, featured, shopDisplay, matchType: body.matchType === 'products' ? 'products' : 'brand' },
     })
   } catch (err) {
     console.error('[admin/categories POST]', err)

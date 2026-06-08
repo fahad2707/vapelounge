@@ -18,6 +18,7 @@ export const ADMIN_PRODUCT_MIN_PROJECTION = {
   categoryId: 1,
   modelId: 1,
   costPrice: 1,
+  categories: 1,
 } as const
 
 export interface AdminProductGridRow {
@@ -36,6 +37,7 @@ export interface AdminProductGridRow {
   descriptionPlain: string
   categoryId: string | null
   modelId: string | null
+  categories?: string[]
 }
 
 export interface AdminProductGridResult {
@@ -66,6 +68,7 @@ function mapDoc(d: ProductDoc): AdminProductGridRow {
     descriptionPlain: '',
     categoryId: d.categoryId ?? null,
     modelId: d.modelId ?? null,
+    categories: d.categories || [],
   }
 }
 

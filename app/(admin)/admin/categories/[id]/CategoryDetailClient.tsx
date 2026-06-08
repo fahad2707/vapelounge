@@ -11,8 +11,9 @@ interface AdminProduct {
   sku: string | null
   categoryId?: string | null
   modelId?: string | null
+  categories?: string[]
 }
-interface Category { id: string; name: string; slug: string; image: string | null; featured: boolean }
+interface Category { id: string; name: string; slug: string; image: string | null; featured: boolean; matchType?: 'brand' | 'products' }
 interface ModelItem { id: string; name: string; slug: string; categoryId: string }
 
 export default function CategoryDetailClient({ categoryId }: { categoryId: string }) {
@@ -45,8 +46,13 @@ export default function CategoryDetailClient({ categoryId }: { categoryId: strin
     [models, categoryId],
   )
   const inCategory = useMemo(
-    () => products.filter(p => p.categoryId === categoryId),
-    [products, categoryId],
+    () => {
+      if (category?.matchType === 'products') {
+        return products.filter(p => p.categories?.includes(category.name))
+      }
+      return products.filter(p => p.categoryId === categoryId)
+    },
+    [products, categoryId, category?.matchType, category?.name],
   )
   const groups = useMemo(() => {
     const map = new Map<string, AdminProduct[]>()
@@ -92,15 +98,34 @@ export default function CategoryDetailClient({ categoryId }: { categoryId: strin
   }, [products])
 
   const addProduct = useCallback(async (handleId: string) => {
-    const ok = await patchProduct(handleId, { categoryId, modelId: null }, p => ({ ...p, categoryId, modelId: null }))
-    if (ok) toast('Product added to category')
-  }, [patchProduct, categoryId])
+    if (category?.matchType === 'products') {
+      const p = products.find(x => x.handleId === handleId)
+      if (p) {
+        const currentCats = p.categories || []
+        if (!currentCats.includes(category.name)) {
+          const newCats = [...currentCats, category.name]
+          const ok = await patchProduct(handleId, { categories: newCats }, cur => ({ ...cur, categories: newCats }))
+          if (ok) toast('Product added to category')
+        }
+      }
+    } else {
+      const ok = await patchProduct(handleId, { categoryId, modelId: null }, p => ({ ...p, categoryId, modelId: null }))
+      if (ok) toast('Product added to category')
+    }
+  }, [patchProduct, categoryId, category?.matchType, category?.name, products])
 
   const removeFromCategory = useCallback(async (p: AdminProduct) => {
     if (!window.confirm(`Remove "${p.name}" from this category?`)) return
-    const ok = await patchProduct(p.handleId, { categoryId: null, modelId: null }, cur => ({ ...cur, categoryId: null, modelId: null }))
-    if (ok) toast('Removed from category')
-  }, [patchProduct])
+    if (category?.matchType === 'products') {
+      const currentCats = p.categories || []
+      const newCats = currentCats.filter(x => x !== category.name)
+      const ok = await patchProduct(p.handleId, { categories: newCats }, cur => ({ ...cur, categories: newCats }))
+      if (ok) toast('Removed from category')
+    } else {
+      const ok = await patchProduct(p.handleId, { categoryId: null, modelId: null }, cur => ({ ...cur, categoryId: null, modelId: null }))
+      if (ok) toast('Removed from category')
+    }
+  }, [patchProduct, category?.matchType, category?.name])
 
   const moveToModel = useCallback(async (p: AdminProduct, modelId: string) => {
     const targetModelId = modelId || null
@@ -175,6 +200,27 @@ export default function CategoryDetailClient({ categoryId }: { categoryId: strin
         <div className="adm-card adm-card-pad" style={{ color: '#64748B', textAlign: 'center' }}>
           No products in this category yet. Use the search above to add some.
         </div>
+      ) : category.matchType === 'products' ? (
+        <section>
+          <div className="adm-section-h">
+            <div>
+              <div className="adm-section-title">Products</div>
+              <div className="adm-section-sub">{inCategory.length} product{inCategory.length === 1 ? '' : 's'}</div>
+            </div>
+          </div>
+          <div className="adm-card">
+            {inCategory.map(p => (
+              <ProductRow
+                key={p.handleId}
+                product={p}
+                models={[]}
+                onMove={() => {}}
+                onRemove={() => removeFromCategory(p)}
+                showModelSelect={false}
+              />
+            ))}
+          </div>
+        </section>
       ) : (
         <>
           {myModels.map(m => {
@@ -253,11 +299,13 @@ function ProductRow({
   models,
   onMove,
   onRemove,
+  showModelSelect = true,
 }: {
   product: AdminProduct
   models: ModelItem[]
   onMove: (modelId: string) => void
   onRemove: () => void
+  showModelSelect?: boolean
 }) {
   return (
     <div className="adm-row">
@@ -272,15 +320,17 @@ function ProductRow({
         <div className="adm-row-sub">{product.brand || '—'}{product.sku ? ` · ${product.sku}` : ''}</div>
       </div>
       <div className="adm-row-actions">
-        <select
-          className="adm-mini-select"
-          value={product.modelId || ''}
-          onChange={e => onMove(e.target.value)}
-          aria-label="Move to model"
-        >
-          <option value="">— no model —</option>
-          {models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-        </select>
+        {showModelSelect && (
+          <select
+            className="adm-mini-select"
+            value={product.modelId || ''}
+            onChange={e => onMove(e.target.value)}
+            aria-label="Move to model"
+          >
+            <option value="">— no model —</option>
+            {models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+          </select>
+        )}
         <button type="button" className="adm-btn adm-btn-danger adm-btn-sm" onClick={onRemove}>
           Remove
         </button>

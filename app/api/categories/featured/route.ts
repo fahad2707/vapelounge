@@ -39,7 +39,7 @@ export async function GET() {
           slug: c.slug,
           name: c.name,
           image: c.image || null,
-          productCount: await countProductsForCategory(db, id, c.name),
+          productCount: await countProductsForCategory(db, id, c.name, c.matchType),
         }
       }),
     )

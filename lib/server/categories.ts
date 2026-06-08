@@ -1,4 +1,4 @@
-import type { Db } from 'mongodb'
+import type { Db, Filter } from 'mongodb'
 import { ObjectId } from 'mongodb'
 import { COL } from '@/lib/db/collections'
 import { slugify } from '@/lib/admin/slug'
@@ -113,15 +113,15 @@ export async function batchCategoryProductCounts(
   const pairs = await Promise.all(
     categories.map(async cat => {
       const id = (cat._id as ObjectId).toString()
-      const n = await col.countDocuments(buildCategoryProductFilter(id, cat.name))
+      const n = await col.countDocuments(buildCategoryProductFilter(id, cat.name, cat.matchType))
       return [id, n] as const
     }),
   )
   return Object.fromEntries(pairs)
 }
 
-export async function countProductsForCategory(db: Db, catId: string, catName: string): Promise<number> {
-  return db.collection<ProductDoc>(COL.products).countDocuments(buildCategoryProductFilter(catId, catName))
+export async function countProductsForCategory(db: Db, catId: string, catName: string, matchType?: 'brand' | 'products'): Promise<number> {
+  return db.collection<ProductDoc>(COL.products).countDocuments(buildCategoryProductFilter(catId, catName, matchType))
 }
 
 export interface ShopDisplayCategory {
@@ -142,9 +142,12 @@ export async function listShopDisplayCategories(db: Db): Promise<ShopDisplayCate
 
   if (!cats.length) return []
 
-  const orFilters = cats.flatMap(c => {
+  const orFilters: Filter<ProductDoc>[] = cats.flatMap(c => {
+    if (c.matchType === 'products') {
+      return [{ categoryId: (c._id as ObjectId).toString() }, { categories: c.name }] as Filter<ProductDoc>[]
+    }
     const re = new RegExp(`^${escapeRegex(c.name)}$`, 'i')
-    return [{ brand: re }, { primaryCategory: re }, { categories: c.name }]
+    return [{ brand: re }, { primaryCategory: re }, { categories: c.name }] as Filter<ProductDoc>[]
   })
 
   const allDocs = await db
@@ -160,6 +163,9 @@ export async function listShopDisplayCategories(db: Db): Promise<ShopDisplayCate
     const nameLower = c.name.toLowerCase()
     const matched = allDocs.filter(p => {
       if (p.categoryId === id) return true
+      if (c.matchType === 'products') {
+        return Array.isArray(p.categories) && p.categories.some(x => (x || '').trim().toLowerCase() === nameLower)
+      }
       if ((p.brand || '').trim().toLowerCase() === nameLower) return true
       if ((p.primaryCategory || '').trim().toLowerCase() === nameLower) return true
       return Array.isArray(p.categories) && p.categories.some(x => (x || '').trim().toLowerCase() === nameLower)

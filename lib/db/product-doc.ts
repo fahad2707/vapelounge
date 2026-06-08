@@ -131,6 +131,8 @@ export interface CategoryDoc {
   headerPageId?: string | null
   /** Order within the header page dropdown (lower = earlier). */
   navOrder?: number
+  /** Type of matching for products: 'brand' matches brand/primaryCategory name, 'products' matches exact products. */
+  matchType?: 'brand' | 'products'
   createdAt?: Date
   updatedAt?: Date
 }

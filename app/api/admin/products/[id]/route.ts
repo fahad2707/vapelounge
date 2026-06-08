@@ -83,6 +83,7 @@ type Patch = Partial<{
   modelId: string | null
   brand: string | null
   primaryCategory: string | null
+  categories?: string[]
 }>
 
 function toNum(v: unknown): number | null {
@@ -139,16 +140,36 @@ export async function PATCH(
     update.primaryCategory = body.primaryCategory.trim()
     update.categories = [body.primaryCategory.trim()]
   }
+  if (Array.isArray(body.categories)) {
+    update.categories = body.categories.map(s => String(s).trim()).filter(Boolean)
+  }
 
   try {
     const db = await getAdminDb()
 
-    if ('categoryId' in body) {
-      const catName = await categoryNameFor(db, body.categoryId)
-      if (catName) {
-        update.brand = catName
-        update.primaryCategory = catName
-        update.categories = [catName]
+    if (!('categories' in body) && 'categoryId' in body) {
+      const existingProduct = await db.collection<ProductDoc>(COL.products).findOne({ handleId })
+      if (existingProduct) {
+        const customCats = await db
+          .collection<CategoryDoc>(COL.categories)
+          .find({ matchType: 'products' })
+          .toArray()
+        const customCatNames = new Set(customCats.map(c => c.name.toLowerCase().trim()))
+
+        const currentCustomCats = (existingProduct.categories || []).filter(c =>
+          customCatNames.has(c.toLowerCase().trim()),
+        )
+
+        const catName = await categoryNameFor(db, body.categoryId)
+        if (catName) {
+          update.brand = catName
+          update.primaryCategory = catName
+          update.categories = Array.from(new Set([catName, ...currentCustomCats]))
+        } else if (body.categoryId === null) {
+          update.brand = null
+          update.primaryCategory = 'Uncategorized'
+          update.categories = Array.from(new Set(['Uncategorized', ...currentCustomCats]))
+        }
       }
     }
 

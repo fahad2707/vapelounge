@@ -32,6 +32,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
         shopDisplay: !!cat.shopDisplay,
         shopDisplayOrder: cat.shopDisplayOrder ?? 999,
         headerPageId: cat.headerPageId ?? null,
+        matchType: cat.matchType || 'brand',
       },
     })
   } catch (err) {
@@ -52,6 +53,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     shopDisplay?: boolean
     shopDisplayOrder?: number
     headerPageId?: string | null
+    matchType?: 'brand' | 'products'
   } = {}
   try { body = (await req.json()) as typeof body } catch { return NextResponse.json({ error: 'Invalid body' }, { status: 400 }) }
 
@@ -71,6 +73,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   if ('headerPageId' in body) {
     update.headerPageId =
       typeof body.headerPageId === 'string' && body.headerPageId.trim() ? body.headerPageId.trim() : null
+  }
+  if ('matchType' in body) {
+    update.matchType = body.matchType === 'products' ? 'products' : 'brand'
   }
 
   try {
@@ -105,10 +110,22 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     await col.updateOne({ _id }, { $set: update })
 
     if (renamed) {
-      await db.collection<ProductDoc>(COL.products).updateMany(
-        { categoryId: id },
-        { $set: { brand: renamed, primaryCategory: renamed, categories: [renamed], updatedAt: new Date() } },
-      )
+      const oldCat = await col.findOne({ _id })
+      const isProductsMode = (update.matchType || oldCat?.matchType) === 'products'
+      if (isProductsMode) {
+        const oldName = oldCat?.name || ''
+        if (oldName) {
+          await db.collection<ProductDoc>(COL.products).updateMany(
+            { categories: oldName },
+            { $set: { "categories.$": renamed, updatedAt: new Date() } }
+          )
+        }
+      } else {
+        await db.collection<ProductDoc>(COL.products).updateMany(
+          { categoryId: id },
+          { $set: { brand: renamed, primaryCategory: renamed, categories: [renamed], updatedAt: new Date() } },
+        )
+      }
     }
 
     revalidateCatalogCache()

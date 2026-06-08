@@ -14,6 +14,7 @@ interface Category {
   shopDisplayOrder: number
   headerPageId: string | null
   productCount: number
+  matchType?: 'brand' | 'products'
 }
 
 const MAX_FEATURED = 6
@@ -30,6 +31,7 @@ export default function CategoriesClient() {
   const [images, setImages] = useState<string[]>([])
   const [featured, setFeatured] = useState(false)
   const [shopDisplay, setShopDisplay] = useState(false)
+  const [matchType, setMatchType] = useState<'brand' | 'products'>('brand')
   const [submitting, setSubmitting] = useState(false)
   const [formErr, setFormErr] = useState<string | null>(null)
 
@@ -77,6 +79,7 @@ export default function CategoriesClient() {
     setImages([])
     setFeatured(false)
     setShopDisplay(false)
+    setMatchType('brand')
     setFormErr(null)
     setOpen(true)
   }
@@ -86,6 +89,7 @@ export default function CategoriesClient() {
     setImages(c.image ? [c.image] : [])
     setFeatured(c.featured)
     setShopDisplay(c.shopDisplay)
+    setMatchType(c.matchType || 'brand')
     setFormErr(null)
     setOpen(true)
   }
@@ -104,6 +108,7 @@ export default function CategoriesClient() {
           image: images[0] || null,
           featured,
           shopDisplay,
+          matchType,
         }),
       })
       const j = (await r.json().catch(() => ({}))) as { error?: string }
@@ -119,7 +124,7 @@ export default function CategoriesClient() {
     } finally {
       setSubmitting(false)
     }
-  }, [editing, name, images, featured, shopDisplay, load])
+  }, [editing, name, images, featured, shopDisplay, matchType, load])
 
   const remove = useCallback(async (c: Category) => {
     if (!window.confirm(`Delete category "${c.name}"?`)) return
@@ -240,8 +245,21 @@ export default function CategoriesClient() {
                       <Link href={`/admin/categories/${c.id}`} style={{ color: '#0F172A' }}>
                         {c.name}
                       </Link>
-                      <div style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace', fontSize: 11, color: '#94A3B8' }}>
-                        {c.slug}
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 2 }}>
+                        <span style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace', fontSize: 11, color: '#94A3B8' }}>
+                          {c.slug}
+                        </span>
+                        <span style={{
+                          fontSize: 9.5,
+                          padding: '1px 5px',
+                          borderRadius: 3,
+                          background: c.matchType === 'products' ? '#F0FDF4' : '#F8FAFC',
+                          color: c.matchType === 'products' ? '#166534' : '#475569',
+                          border: `1px solid ${c.matchType === 'products' ? '#DCFCE7' : '#E2E8F0'}`,
+                          fontWeight: 500
+                        }}>
+                          {c.matchType === 'products' ? 'Single Products' : 'Brand'}
+                        </span>
                       </div>
                     </td>
                     <td style={{ color: '#475569', fontSize: 13 }}>{c.productCount}</td>
@@ -328,6 +346,22 @@ export default function CategoriesClient() {
                 placeholder="e.g. Elf Bar"
                 autoFocus
               />
+            </div>
+
+            <div>
+              <label className="adm-label" htmlFor="cat-mode">Category Type</label>
+              <select
+                id="cat-mode"
+                className="adm-select"
+                value={matchType}
+                onChange={e => setMatchType(e.target.value as 'brand' | 'products')}
+              >
+                <option value="brand">Whole Brand (Auto-matches products by Brand name)</option>
+                <option value="products">Single Products (Add individual flavors/products)</option>
+              </select>
+              <div className="adm-help">
+                Use "Whole Brand" if this category represents a vape brand line. Use "Single Products" for custom deal or sale collections (like Top Deals) where you want to add specific items.
+              </div>
             </div>
 
             <div>
