@@ -115,6 +115,7 @@ interface CreateProductBody {
   name?: string
   description?: string
   price?: number | string
+  compareAtPrice?: number | string | null
   costPrice?: number | string | null
   quantity?: number | string | null
   images?: string[]
@@ -148,6 +149,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Selling price is required and must be ≥ 0.' }, { status: 400 })
   }
 
+  const compareAtPrice = toNum(body.compareAtPrice ?? null)
   const cost = toNum(body.costPrice ?? null)
   const qty = toNum(body.quantity ?? null)
   const description = (body.description || '').trim()
@@ -177,7 +179,7 @@ export async function POST(req: Request) {
     primaryCategory,
     categories: primaryCategory ? [primaryCategory] : [],
     price,
-    compareAtPrice: null,
+    compareAtPrice,
     badge: null,
     inStock: qty == null ? true : qty > 0,
     variants: [],

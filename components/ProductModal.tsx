@@ -365,7 +365,7 @@ export default function ProductModal({
             {product.name}
           </h2>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 20 }}>
-            <span style={{ fontFamily: 'var(--serif)', fontSize: 28, color: 'var(--cream)' }}>{formatCad(product.price)}</span>
+            <span style={{ fontFamily: 'var(--serif)', fontSize: 28, fontWeight: product.compareAtPrice != null && product.compareAtPrice > product.price ? 700 : 400, color: 'var(--cream)' }}>{formatCad(product.price)}</span>
             {product.compareAtPrice != null && product.compareAtPrice > product.price && (
               <span style={{ fontSize: 15, color: 'var(--fog2)', textDecoration: 'line-through' }}>{formatCad(product.compareAtPrice)}</span>
             )}

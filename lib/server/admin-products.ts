@@ -9,6 +9,7 @@ export const ADMIN_PRODUCT_MIN_PROJECTION = {
   name: 1,
   image: 1,
   price: 1,
+  compareAtPrice: 1,
   sku: 1,
   brand: 1,
   primaryCategory: 1,
@@ -28,6 +29,7 @@ export interface AdminProductGridRow {
   image: string
   images: string[]
   price: number
+  compareAtPrice: number | null
   costPrice: number | null
   quantity: number | null
   visible: boolean
@@ -59,6 +61,7 @@ function mapDoc(d: ProductDoc): AdminProductGridRow {
     image,
     images: image ? [image] : [],
     price: d.price ?? 0,
+    compareAtPrice: d.compareAtPrice ?? null,
     costPrice: d.costPrice ?? null,
     quantity: d.quantity ?? null,
     visible: d.visible !== false,

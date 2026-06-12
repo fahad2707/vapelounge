@@ -61,7 +61,7 @@ async function main() {
       },
       { projection: PRODUCT_LIST_PROJECTION },
     )
-    .sort({ name: 1 })
+    .sort({ _id: -1 })
     .limit(FEATURED_COUNT)
     .toArray()
 
@@ -70,7 +70,7 @@ async function main() {
     const more = await db
       .collection<ProductDoc>(COL.products)
       .find(SHOP_VISIBLE, { projection: PRODUCT_LIST_PROJECTION })
-      .sort({ name: 1 })
+      .sort({ _id: -1 })
       .limit(FEATURED_COUNT * 2)
       .toArray()
     const seen = new Set(docs.map(d => d.handleId))

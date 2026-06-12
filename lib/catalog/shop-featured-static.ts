@@ -23,7 +23,11 @@ export function mergeCatalogWithFeatured(
   rest: CatalogProduct[],
 ): CatalogProduct[] {
   if (!rest.length) return featured
-  const ids = new Set(featured.map(p => p.id))
-  const extra = rest.filter(p => !ids.has(p.id))
-  return [...featured, ...extra]
+  const restMap = new Map(rest.map(p => [p.id, p]))
+  const updatedFeatured = featured
+    .filter(p => restMap.has(p.id))
+    .map(p => restMap.get(p.id)!)
+  const featuredIds = new Set(featured.map(p => p.id))
+  const extra = rest.filter(p => !featuredIds.has(p.id))
+  return [...updatedFeatured, ...extra]
 }

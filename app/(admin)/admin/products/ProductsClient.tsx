@@ -12,6 +12,7 @@ interface AdminProduct {
   image: string
   images: string[]
   price: number
+  compareAtPrice?: number | null
   costPrice?: number | null
   quantity?: number | null
   visible: boolean
@@ -24,11 +25,13 @@ interface AdminProduct {
 }
 
 function productToForm(p: AdminProduct): ProductFormValues {
+  const hasDiscount = p.compareAtPrice != null && p.compareAtPrice > p.price
   return {
     sku: p.sku || '',
     name: p.name,
     description: p.descriptionPlain || '',
-    price: String(p.price ?? ''),
+    price: hasDiscount ? String(p.compareAtPrice) : String(p.price ?? ''),
+    discountedPrice: hasDiscount ? String(p.price) : '',
     costPrice: p.costPrice == null ? '' : String(p.costPrice),
     quantity: p.quantity == null ? '' : String(p.quantity),
     categoryId: p.categoryId || '',
@@ -140,6 +143,24 @@ export default function ProductsClient() {
     }
   }, [])
 
+  const toggleStock = useCallback(async (p: AdminProduct) => {
+    const next = !p.inStock
+    setProducts(list => list.map(x => (x.handleId === p.handleId ? { ...x, inStock: next } : x)))
+    try {
+      const r = await fetch(`/api/admin/products/${encodeURIComponent(p.handleId)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inStock: next }),
+      })
+      if (!r.ok) throw new Error()
+      setSavedToast(next ? `${p.name} is now In Stock` : `${p.name} marked Out of Stock`)
+      window.setTimeout(() => setSavedToast(null), 2200)
+    } catch {
+      setProducts(list => list.map(x => (x.handleId === p.handleId ? { ...x, inStock: p.inStock } : x)))
+      setLoadErr('Could not update stock status. Please try again.')
+    }
+  }, [])
+
   const removeProduct = useCallback(async (p: AdminProduct) => {
     if (!window.confirm(`Delete "${p.name}" permanently? This cannot be undone.`)) return
     const prev = products
@@ -186,11 +207,23 @@ export default function ProductsClient() {
     setSubmitErr(null)
     setSubmitting(true)
     try {
+      const priceVal = Number.parseFloat(form.price)
+      const discVal = form.discountedPrice.trim() ? Number.parseFloat(form.discountedPrice) : null
+
+      let price = priceVal
+      let compareAtPrice: number | null = null
+
+      if (discVal !== null && !Number.isNaN(discVal) && discVal < priceVal) {
+        price = discVal
+        compareAtPrice = priceVal
+      }
+
       const payload = {
         sku: form.sku.trim() || null,
         name: form.name.trim(),
         description: form.description,
-        price: form.price,
+        price,
+        compareAtPrice,
         costPrice: form.costPrice || null,
         quantity: form.quantity || null,
         images: form.images,
@@ -302,12 +335,34 @@ export default function ProductsClient() {
                 <div className="adm-prod-name">{p.name}</div>
                 <div className="adm-prod-sku">SKU: {p.sku || '—'}</div>
                 <div className="adm-prod-row">
-                  <span className="adm-prod-price">{formatCad(p.price)}</span>
+                  <span className="adm-prod-price">
+                    {p.compareAtPrice != null && p.compareAtPrice > p.price ? (
+                      <>
+                        <span style={{ textDecoration: 'line-through', color: '#64748B', marginRight: 6, fontSize: 12.5 }}>{formatCad(p.compareAtPrice)}</span>
+                        <span style={{ color: '#1E293B', fontWeight: 700 }}>{formatCad(p.price)}</span>
+                      </>
+                    ) : (
+                      formatCad(p.price)
+                    )}
+                  </span>
                   <span className={`adm-pill ${p.visible ? 'visible' : 'hidden'}`}>
                     {p.visible ? 'Visible' : 'Hidden'}
                   </span>
                 </div>
-                <div style={{ fontSize: 11.5, color: '#64748B' }}>
+                <div className="adm-prod-row" style={{ marginTop: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, cursor: 'pointer', color: '#334155' }}>
+                    <input
+                      type="checkbox"
+                      checked={p.inStock}
+                      onChange={() => toggleStock(p)}
+                    />
+                    In Stock
+                  </label>
+                  <span className={`adm-pill ${p.inStock ? 'visible' : 'hidden'}`} style={{ fontSize: 10, padding: '2px 6px', background: p.inStock ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)', color: p.inStock ? '#166534' : '#991b1b', border: p.inStock ? '1px solid rgba(34,197,94,0.2)' : '1px solid rgba(239,68,68,0.2)' }}>
+                    {p.inStock ? 'In Stock' : 'Out of Stock'}
+                  </span>
+                </div>
+                <div style={{ fontSize: 11.5, color: '#64748B', marginTop: 2 }}>
                   {p.brand || p.primaryCategory || '—'}
                   {p.quantity != null ? ` · Qty: ${p.quantity}` : ''}
                 </div>

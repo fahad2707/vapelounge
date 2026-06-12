@@ -171,7 +171,7 @@ function ProductCard({
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-            <span style={{ fontFamily: 'var(--serif)', fontSize: 18, fontWeight: 400, color: 'var(--cream)' }}>{formatCad(p.price)}</span>
+            <span style={{ fontFamily: 'var(--serif)', fontSize: 18, fontWeight: p.compareAtPrice != null && p.compareAtPrice > p.price ? 700 : 400, color: 'var(--cream)' }}>{formatCad(p.price)}</span>
             {p.compareAtPrice != null && p.compareAtPrice > p.price && (
               <span style={{ fontSize: 11, color: 'var(--fog2)', textDecoration: 'line-through' }}>{formatCad(p.compareAtPrice)}</span>
             )}

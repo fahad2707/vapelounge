@@ -10,6 +10,7 @@ export interface ProductFormValues {
   name: string
   description: string
   price: string
+  discountedPrice: string
   costPrice: string
   quantity: string
   categoryId: string
@@ -22,6 +23,7 @@ export const EMPTY_PRODUCT: ProductFormValues = {
   name: '',
   description: '',
   price: '',
+  discountedPrice: '',
   costPrice: '',
   quantity: '',
   categoryId: '',
@@ -128,6 +130,20 @@ export default function ProductForm({
           />
         </div>
         <div>
+          <label htmlFor="pf-discountedPrice" className="adm-label">Discounted price (CAD) <span style={{ color: '#94A3B8', fontWeight: 400 }}>· optional</span></label>
+          <input
+            id="pf-discountedPrice"
+            type="number" step="0.01" min="0"
+            className="adm-input"
+            value={value.discountedPrice}
+            onChange={e => set('discountedPrice', e.target.value)}
+            placeholder="19.99"
+          />
+        </div>
+      </div>
+
+      <div className="adm-form-row-2">
+        <div>
           <label htmlFor="pf-cost" className="adm-label">Cost price (CAD) <span style={{ color: '#94A3B8', fontWeight: 400 }}>· optional</span></label>
           <input
             id="pf-cost"
@@ -138,9 +154,6 @@ export default function ProductForm({
             placeholder="15.00"
           />
         </div>
-      </div>
-
-      <div className="adm-form-row-2">
         <div>
           <label htmlFor="pf-qty" className="adm-label">Quantity available <span style={{ color: '#94A3B8', fontWeight: 400 }}>· optional</span></label>
           <input
@@ -153,6 +166,9 @@ export default function ProductForm({
           />
           <div className="adm-help">Leave empty for unlimited stock.</div>
         </div>
+      </div>
+
+      <div className="adm-form-row-2">
         <div>
           <label htmlFor="pf-cat" className="adm-label">Category</label>
           <select
@@ -165,23 +181,22 @@ export default function ProductForm({
             {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </div>
-      </div>
-
-      <div>
-        <label htmlFor="pf-model" className="adm-label">Model</label>
-        <select
-          id="pf-model"
-          className="adm-select"
-          value={value.modelId}
-          onChange={e => set('modelId', e.target.value)}
-          disabled={!value.categoryId}
-        >
-          <option value="">— none —</option>
-          {filteredModels.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-        </select>
-        {!value.categoryId
-          ? <div className="adm-help">Pick a category first to enable models.</div>
-          : filteredModels.length === 0 && <div className="adm-help">No models in this category yet — add one from Models page.</div>}
+        <div>
+          <label htmlFor="pf-model" className="adm-label">Model</label>
+          <select
+            id="pf-model"
+            className="adm-select"
+            value={value.modelId}
+            onChange={e => set('modelId', e.target.value)}
+            disabled={!value.categoryId}
+          >
+            <option value="">— none —</option>
+            {filteredModels.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+          </select>
+          {!value.categoryId
+            ? <div className="adm-help">Pick a category first to enable models.</div>
+            : filteredModels.length === 0 && <div className="adm-help">No models in this category.</div>}
+        </div>
       </div>
 
       <div>

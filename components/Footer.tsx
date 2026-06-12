@@ -1,10 +1,8 @@
 const ADDRESS = '17 Chalmers St S Unit B, Cambridge, ON N1R 5A9'
 const MAP_QUERY = encodeURIComponent(ADDRESS)
 const MAP_EMBED = `https://maps.google.com/maps?q=${MAP_QUERY}&t=&z=15&ie=UTF8&iwloc=&output=embed`
-const PHONE_1 = '+13828851370'
-const PHONE_2 = '+16477135363'
-const PHONE_1_DISPLAY = '+1 (382) 885-1370'
-const PHONE_2_DISPLAY = '+1 (647) 713-5363'
+const PHONE = '+16477135363'
+const PHONE_DISPLAY = '+1 (647) 713-5363'
 const EMAIL = 'vape.lounge92@gmail.com'
 const INSTAGRAM = 'https://www.instagram.com/vapeloungepro?igsh=MXNsdzdrOGtoZ3Vlcw=='
 
@@ -39,8 +37,7 @@ export default function Footer() {
 
         <div className="footer-contact-col">
           <h5 className="footer-heading">Contact us</h5>
-          <a href={`tel:${PHONE_1}`} className="footer-link">{PHONE_1_DISPLAY}</a>
-          <a href={`tel:${PHONE_2}`} className="footer-link">{PHONE_2_DISPLAY}</a>
+          <a href={`tel:${PHONE}`} className="footer-link">{PHONE_DISPLAY}</a>
           <p style={{ fontSize: 12, color: 'var(--fog)', margin: '14px 0 10px', lineHeight: 1.6 }}>{ADDRESS}</p>
           <div className="footer-social">
             <a

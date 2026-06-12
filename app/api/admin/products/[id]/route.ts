@@ -45,6 +45,7 @@ export async function GET(
         image: images[0] || d.image || '',
         images,
         price: d.price ?? 0,
+        compareAtPrice: d.compareAtPrice ?? null,
         costPrice: d.costPrice ?? null,
         quantity: d.quantity ?? null,
         visible: d.visible !== false,
@@ -72,10 +73,12 @@ async function categoryNameFor(db: Awaited<ReturnType<typeof getAdminDb>>, id: s
 
 type Patch = Partial<{
   visible: boolean
+  inStock: boolean
   name: string
   description: string
   sku: string | null
   price: number
+  compareAtPrice: number | null
   costPrice: number | null
   quantity: number | null
   images: string[]
@@ -111,6 +114,7 @@ export async function PATCH(
 
   const update: Record<string, unknown> = { updatedAt: new Date() }
   if (typeof body.visible === 'boolean') update.visible = body.visible
+  if (typeof body.inStock === 'boolean') update.inStock = body.inStock
   if (typeof body.name === 'string' && body.name.trim()) update.name = body.name.trim()
   if (typeof body.description === 'string') {
     const desc = body.description.trim()
@@ -122,6 +126,7 @@ export async function PATCH(
     const n = toNum(body.price)
     if (n !== null) update.price = n
   }
+  if ('compareAtPrice' in body) update.compareAtPrice = toNum(body.compareAtPrice)
   if ('costPrice' in body) update.costPrice = toNum(body.costPrice)
   if ('quantity' in body) {
     const q = toNum(body.quantity)
